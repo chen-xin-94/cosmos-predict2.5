@@ -243,6 +243,7 @@ class TextAttr(AbstractEmbModel):
         use_empty_string: bool = False,
         empty_string_embeddings_path: str = "s3://bucket/predict2_assets/reason1_empty_string_embeddings.pt",
         credential_path: str = "credentials/s3_training.secret",
+        use_prompt: bool = False,
     ):
         super().__init__()
         self._input_key = input_key
@@ -253,6 +254,7 @@ class TextAttr(AbstractEmbModel):
         self._empty_string_embeddings_cache = None
         self.empty_string_embeddings_path = empty_string_embeddings_path
         self.credential_path = credential_path
+        self.use_prompt = use_prompt
 
     def forward(self, token: torch.Tensor):
         return {"crossattn_emb": token}

@@ -251,6 +251,7 @@ _SHARED_CONFIG = dict(
         input_key=["t5_text_embeddings"],
         dropout_rate=0.2,
         use_empty_string=False,
+        use_prompt=False,
     ),
     use_video_condition=L(BooleanFlag)(
         input_key="fps",

@@ -160,6 +160,7 @@ class TextEncoder:
                     ],
                 },
             ]
+
             tokenizer_output = self.model.tokenizer.apply_chat_template(
                 conversations,
                 tokenize=True,

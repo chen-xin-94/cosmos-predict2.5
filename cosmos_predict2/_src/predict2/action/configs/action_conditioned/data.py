@@ -20,7 +20,7 @@ from megatron.core import parallel_state
 from torch.utils.data import DataLoader, DistributedSampler
 
 from cosmos_predict2._src.imaginaire.lazy_config import LazyCall as L
-from cosmos_predict2._src.predict2.action.datasets.dataset_local import Dataset_3D
+from cosmos_predict2._src.predict2.action.datasets.dataset_local import Dataset_3D, Dataset_3D_avla
 
 try:
     from cosmos_predict2._src.predict2.action.configs.action_conditioned.experiment.gr00t_customized_gr1 import (
@@ -30,12 +30,11 @@ except ImportError:
     register_gr00t_customized_gr1_data = None
 
 # bridge dataset path
-base_path = "datasets/bridge/"
+base_path = "cosmos_predict2/datasets/df/avla_nov_8_merged_per_embodiment_2025-11-12/fr3_single_arm_franka_hand"
 
 train_annotation_path = os.path.join(base_path, "annotation/train")
 val_annotation_path = os.path.join(base_path, "annotation/val")
 test_annotation_path = os.path.join(base_path, "annotation/test")
-
 
 # experiment for next-frame prediction
 bridge_train_dataset = L(Dataset_3D)(
@@ -93,6 +92,62 @@ bridge_13frame_480_640_val_dataset = L(Dataset_3D)(
     mode="val",
 )
 
+################### AVLA Dataset ###################
+avla_franka_single_arm_train_dataset = L(Dataset_3D_avla)(
+    train_annotation_path=train_annotation_path,
+    val_annotation_path=val_annotation_path,
+    test_annotation_path=test_annotation_path,
+    video_path=base_path,
+    fps_downsample_ratio=1,
+    num_action_per_chunk=1,
+    cam_ids=[0],
+    accumulate_action=False,
+    video_size=[256, 320],
+    val_start_frame_interval=1,
+    mode="train",
+)
+avla_franka_single_arm_val_dataset = L(Dataset_3D_avla)(
+    train_annotation_path=train_annotation_path,
+    val_annotation_path=val_annotation_path,
+    test_annotation_path=test_annotation_path,
+    video_path=base_path,
+    fps_downsample_ratio=1,
+    num_action_per_chunk=1,
+    cam_ids=[0],
+    accumulate_action=False,
+    video_size=[256, 320],
+    val_start_frame_interval=1,
+    mode="val",
+)
+
+# experiment for action-sequence video prediction
+avla_franka_single_arm_13frame_480_640_train_dataset = L(Dataset_3D_avla)(
+    train_annotation_path=train_annotation_path,
+    val_annotation_path=val_annotation_path,
+    test_annotation_path=test_annotation_path,
+    video_path=base_path,
+    fps_downsample_ratio=1,
+    num_action_per_chunk=12,
+    cam_ids=[0],
+    accumulate_action=False,
+    video_size=[480, 640],
+    val_start_frame_interval=1,
+    mode="train",
+)
+avla_franka_single_arm_13frame_480_640_val_dataset = L(Dataset_3D_avla)(
+    train_annotation_path=train_annotation_path,
+    val_annotation_path=val_annotation_path,
+    test_annotation_path=test_annotation_path,
+    video_path=base_path,
+    fps_downsample_ratio=1,
+    num_action_per_chunk=12,
+    cam_ids=[0],
+    accumulate_action=False,
+    video_size=[480, 640],
+    val_start_frame_interval=1,
+    mode="val",
+)
+################################################
 
 # ------------------------------------------------------------
 
@@ -134,6 +189,35 @@ bridge_13frame_480_640_val_dataloader = L(DataLoader)(
     drop_last=True,
 )
 
+################### AVLA Dataloader ###################
+avla_franka_single_arm_train_dataloader = L(DataLoader)(
+    dataset=avla_franka_single_arm_train_dataset,
+    sampler=L(get_sampler)(dataset=bridge_train_dataset),
+    batch_size=1,
+    drop_last=True,
+)
+avla_franka_single_arm_val_dataloader = L(DataLoader)(
+    dataset=avla_franka_single_arm_val_dataset,
+    sampler=L(get_sampler)(dataset=bridge_val_dataset),
+    batch_size=1,
+    drop_last=True,
+)
+
+avla_franka_single_arm_13frame_480_640_train_dataloader = L(DataLoader)(
+    dataset=avla_franka_single_arm_13frame_480_640_train_dataset,
+    sampler=L(get_sampler)(dataset=avla_franka_single_arm_13frame_480_640_train_dataset),
+    batch_size=1,
+    drop_last=True,
+)
+avla_franka_single_arm_13frame_480_640_val_dataloader = L(DataLoader)(
+    dataset=avla_franka_single_arm_13frame_480_640_val_dataset,
+    sampler=L(get_sampler)(dataset=avla_franka_single_arm_13frame_480_640_val_dataset),
+    batch_size=1,
+    drop_last=True,
+)
+################################################
+
+
 
 def register_training_and_val_data():
     cs = ConfigStore.instance()
@@ -156,28 +240,28 @@ def register_training_and_val_data():
     cs.store(
         group="data_train",
         package="dataloader_train",
-        name="bridge_train",
-        node=bridge_train_dataloader,
+        name="avla_franka_single_arm_train",
+        node=avla_franka_single_arm_train_dataloader,
     )
     cs.store(
         group="data_val",
         package="dataloader_val",
-        name="bridge_val",
-        node=bridge_val_dataloader,
+        name="avla_franka_single_arm_val",
+        node=avla_franka_single_arm_val_dataloader,
     )
 
     # 13 frame 480 640
     cs.store(
         group="data_train",
         package="dataloader_train",
-        name="bridge_13frame_480_640_train",
-        node=bridge_13frame_480_640_train_dataloader,
+        name="avla_franka_single_arm_13frame_480_640_train",
+        node=avla_franka_single_arm_13frame_480_640_train_dataloader,
     )
     cs.store(
         group="data_val",
         package="dataloader_val",
-        name="bridge_13frame_480_640_val",
-        node=bridge_13frame_480_640_val_dataloader,
+        name="avla_franka_single_arm_13frame_480_640_val",
+        node=avla_franka_single_arm_13frame_480_640_val_dataloader,
     )
 
     # Register gr00t_customized_gr1 data

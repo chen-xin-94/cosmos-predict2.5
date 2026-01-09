@@ -28,7 +28,7 @@ import torchvision
 from loguru import logger
 
 from cosmos_predict2._src.imaginaire.utils import distributed
-from cosmos_predict2._src.predict2.action.datasets.dataset_utils import euler2rotm, rotm2euler, rotm2quat
+from cosmos_predict2._src.predict2.action.datasets.dataset_utils import euler2rotm, rotm2euler, rotm2quat, quat2rotm
 from cosmos_predict2._src.predict2.inference.video2world import (
     Video2WorldInference,
 )
@@ -81,12 +81,12 @@ def _get_actions(arm_states, gripper_states, sequence_length, use_quat=False):
 
     for k in range(1, sequence_length):
         prev_xyz = arm_states[k - 1, 0:3]
-        prev_rpy = arm_states[k - 1, 3:6]
-        prev_rotm = euler2rotm(prev_rpy)
+        prev_quat = arm_states[k - 1, 3:7]
+        prev_rotm = quat2rotm(prev_quat)
         curr_xyz = arm_states[k, 0:3]
-        curr_rpy = arm_states[k, 3:6]
+        curr_quat = arm_states[k, 3:7]
         curr_gripper = gripper_states[k]
-        curr_rotm = euler2rotm(curr_rpy)
+        curr_rotm = quat2rotm(curr_quat)
         rel_xyz = np.dot(prev_rotm.T, curr_xyz - prev_xyz)
         rel_rotm = prev_rotm.T @ curr_rotm
 
@@ -178,6 +178,59 @@ def load_default_action_fn():
             "initial_frame": img_array,
             "video_array": video_array,
             "video_path": video_path,
+        }
+
+    return load_fn
+
+
+def load_image_action_fn():
+    """
+    Load given image as initial frame
+    """
+
+    def load_fn(
+        json_data: dict,
+        video_path: str,
+        args: ActionConditionedInferenceArguments,
+    ) -> dict:
+        """
+        Load action data from JSON and prepare it for inference.
+
+        Args:
+            json_data: JSON data containing robot states
+            video_path: Path to the video file
+            args: Inference arguments
+
+        Returns:
+            Dictionary containing actions, video data, and metadata
+        """
+        # Get action sequence from states
+        actions = get_action_sequence_from_states(
+            json_data,
+            fps_downsample_ratio=args.fps_downsample_ratio,
+            state_key=args.state_key,
+            gripper_scale=args.gripper_scale,
+            gripper_key=args.gripper_key,
+            action_scaler=args.action_scaler,
+            use_quat=args.use_quat,
+        )
+
+        # Load video
+        img_array = mediapy.read_image("/raid/yusong.li/workspace/cosmos-predict2.5_df/assets/action_conditioned/novel/1000-2.png")
+
+        # Resize if specified
+        if args.resolution != "none":
+            try:
+                h, w = map(int, args.resolution.split(","))
+                img_array = mediapy.resize_image(img_array, (h, w))
+            except Exception as e:
+                logger.warning(f"Failed to resize image to {args.resolution}: {e}")
+
+        return {
+            "actions": actions,
+            "initial_frame": img_array,
+            "video_array": None,
+            "video_path": None,
         }
 
     return load_fn
@@ -292,6 +345,8 @@ def inference(
             video_path = str(input_video_path / json_data["videos"][camera_id]["video_path"])
         else:
             video_path = str(input_video_path / json_data["videos"][camera_id])
+        
+        text = json_data["text"]
 
         # Load action data using the configured function
         action_data = action_load_fn()(json_data, video_path, inference_args)
@@ -333,7 +388,7 @@ def inference(
 
             # Call generate_vid2world
             video = video2world_cli.generate_vid2world(
-                prompt=inference_args.prompt or "",
+                prompt=text if inference_args.use_text else "",
                 input_path=vid_input,
                 action=torch.from_numpy(actions_chunk).float()
                 if isinstance(actions_chunk, np.ndarray)

@@ -204,6 +204,8 @@ class ImaginaireTrainer:
                             ),
                         ):
                             data_batch = next(dataloader_train_iter)
+                            # print("got batch")
+                            # import pdb; pdb.set_trace()
                     except StopIteration:
                         break
                     finally:

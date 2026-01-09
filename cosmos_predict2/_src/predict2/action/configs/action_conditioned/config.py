@@ -74,7 +74,7 @@ def make_config() -> Config:
 
     c.trainer.type = Trainer
     c.trainer.straggler_detection.enabled = False
-    c.trainer.max_iter = 400_000
+    c.trainer.max_iter = 10_000 # 400_000
     c.trainer.logging_iter = 10
     c.trainer.validation_iter = 100
     c.trainer.run_validation = False

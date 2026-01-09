@@ -689,7 +689,6 @@ class DistributedCheckpointer(AbstractCheckpointer):
             )
 
         if distributed.is_rank0():
-            print(f"Saving last checkpoint file {checkpoint_file}")
             self._write_latest_checkpoint_file(checkpoint_file)
 
         log.critical(f"Saved checkpoint to {os.path.join(self.save_dirname, checkpoint_file)}", rank0_only=True)
