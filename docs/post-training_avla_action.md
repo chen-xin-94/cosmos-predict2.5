@@ -18,6 +18,12 @@ Create train-val-test split with `avla_data_preprocessing/split.py`.
 ## 2. Training Arguments
 Currently, all training arguments and configs are defined in Dict `ac_reason_embeddings_rectified_flow_2b_256_320_avla` under `cosmos_predict2/experiments/base/action.py`.
 
+
+For now, `bash_path` in [`cosmos_predict2/_src/predict2/action/configs/action_conditioned/data.py`](../cosmos_predict2/_src/predict2/action/configs/action_conditioned/data.py#L33) need to be manually modified if using other data from data_foundry.
+
+(now set default as `cosmos_predict2/datasets/df/avla_nov_8_merged_per_embodiment_2025-11-12/fr3_single_arm_franka_hand`)
+
+
 ## 3. Training
 Run
 
@@ -91,6 +97,10 @@ python examples/action_conditioned.py \
 }
 
 ```
+
+
+
+
 
 
 
