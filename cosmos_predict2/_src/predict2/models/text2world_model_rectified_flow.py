@@ -363,7 +363,6 @@ class Text2WorldModelRectifiedFlow(ImaginaireModel):
 
         # Obtain text embeddings online
         if self.config.text_encoder_config is not None and self.config.text_encoder_config.compute_online:
-            # import pdb; pdb.set_trace()
             if self.config.conditioner.text.use_prompt:
             # text_embeddings = self.text_encoder.compute_text_embeddings_online(data_batch, self.input_caption_key)
                 text_embeddings = self.text_encoder.compute_text_embeddings_online(data_batch, self.input_text_key)
@@ -419,7 +418,6 @@ class Text2WorldModelRectifiedFlow(ImaginaireModel):
             condition=condition,
         )
 
-        # import pdb; pdb.set_trace()
 
         time_weights_B = self.rectified_flow.train_time_weight(timesteps, self.tensor_kwargs_fp32)
         per_instance_loss = torch.mean(
@@ -893,7 +891,6 @@ class Text2WorldModelRectifiedFlow(ImaginaireModel):
 
         # Latent state
         raw_state = data_batch[self.input_image_key if is_image_batch else self.input_data_key]
-        # import pdb; pdb.set_trace()
         latent_state = self.encode(raw_state).contiguous().float()
 
         # Condition

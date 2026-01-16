@@ -20,7 +20,7 @@ from megatron.core import parallel_state
 from torch.utils.data import DataLoader, DistributedSampler
 
 from cosmos_predict2._src.imaginaire.lazy_config import LazyCall as L
-from cosmos_predict2._src.predict2.action.datasets.dataset_local import Dataset_3D, Dataset_3D_avla
+from cosmos_predict2._src.predict2.action.datasets.dataset_local import Dataset_3D, Dataset_3D_df
 
 try:
     from cosmos_predict2._src.predict2.action.configs.action_conditioned.experiment.gr00t_customized_gr1 import (
@@ -93,7 +93,7 @@ bridge_13frame_480_640_val_dataset = L(Dataset_3D)(
 )
 
 ################### AVLA Dataset ###################
-avla_franka_single_arm_train_dataset = L(Dataset_3D_avla)(
+avla_franka_single_arm_train_dataset = L(Dataset_3D_df)(
     train_annotation_path=train_annotation_path,
     val_annotation_path=val_annotation_path,
     test_annotation_path=test_annotation_path,
@@ -106,7 +106,7 @@ avla_franka_single_arm_train_dataset = L(Dataset_3D_avla)(
     val_start_frame_interval=1,
     mode="train",
 )
-avla_franka_single_arm_val_dataset = L(Dataset_3D_avla)(
+avla_franka_single_arm_val_dataset = L(Dataset_3D_df)(
     train_annotation_path=train_annotation_path,
     val_annotation_path=val_annotation_path,
     test_annotation_path=test_annotation_path,
@@ -121,7 +121,7 @@ avla_franka_single_arm_val_dataset = L(Dataset_3D_avla)(
 )
 
 # experiment for action-sequence video prediction
-avla_franka_single_arm_13frame_480_640_train_dataset = L(Dataset_3D_avla)(
+avla_franka_single_arm_13frame_480_640_train_dataset = L(Dataset_3D_df)(
     train_annotation_path=train_annotation_path,
     val_annotation_path=val_annotation_path,
     test_annotation_path=test_annotation_path,
@@ -134,7 +134,7 @@ avla_franka_single_arm_13frame_480_640_train_dataset = L(Dataset_3D_avla)(
     val_start_frame_interval=1,
     mode="train",
 )
-avla_franka_single_arm_13frame_480_640_val_dataset = L(Dataset_3D_avla)(
+avla_franka_single_arm_13frame_480_640_val_dataset = L(Dataset_3D_df)(
     train_annotation_path=train_annotation_path,
     val_annotation_path=val_annotation_path,
     test_annotation_path=test_annotation_path,

@@ -429,7 +429,7 @@ class Dataset_3D(Dataset):
             return self[np.random.randint(len(self.samples))]
 
 
-class Dataset_3D_avla(Dataset):
+class Dataset_3D_df(Dataset_3D):
     def __init__(
         self,
         train_annotation_path,
@@ -455,177 +455,39 @@ class Dataset_3D_avla(Dataset):
         gripper_rescale_factor=1.0,
         is_rollout=None,
     ):
-        """Dataset class for loading 3D robot action-conditional data.
+        """Dataset class for loading 3D robot action-conditional data with text descriptions.
 
-        This dataset loads robot trajectories consisting of RGB video frames, robot states (arm positions and gripper states),
-        and computes relative actions between consecutive frames.
+        Extends Dataset_3D to support quaternion-based arm states and text embeddings.
+        Uses FFmpeg for video loading to handle AV1 codec efficiently.
 
         Args:
-            train_annotation_path (str): Path to training annotation files
-            val_annotation_path (str): Path to validation annotation files
-            test_annotation_path (str): Path to test annotation files
-            video_path (str): Base path to video files
-            fps_downsample_ratio (int): Interval between sampled frames in a sequence
-            num_action_per_chunk (int): Number of frames to load per sequence
-            cam_ids (list): List of camera IDs to sample from
-            accumulate_action (bool): Whether to accumulate actions relative to first frame
-            video_size (list): Target size [H,W] for video frames
-            val_start_frame_interval (int): Frame sampling interval for validation/test
-            debug (bool, optional): If True, only loads subset of data. Defaults to False.
-            normalize (bool, optional): Whether to normalize video frames. Defaults to False.
-            pre_encode (bool, optional): Whether to pre-encode video frames. Defaults to False.
-            do_evaluate (bool, optional): Whether in evaluation mode. Defaults to False.
-            load_t5_embeddings (bool, optional): Whether to load T5 embeddings. Defaults to False.
-            load_action (bool, optional): Whether to load actions. Defaults to True.
-            mode (str, optional): Dataset mode - 'train', 'val' or 'test'. Defaults to 'train'.
-
-        The dataset loads robot trajectories and computes:
-        - RGB video frames from specified camera views
-        - Robot arm states (xyz position + euler angles)
-        - Gripper states (binary open/closed)
-        - Relative actions between consecutive frames
-
-        Actions are computed as relative transforms between frames:
-        - Translation: xyz offset in previous frame's coordinate frame
-        - Rotation: euler angles of relative rotation
-        - Gripper: binary gripper state
-
-        Returns dict with:
-            - video: RGB frames tensor [T,C,H,W]
-            - action: Action tensor [T-1,7]
-            - video_name: Dict with episode/frame metadata
-            - latent: Pre-encoded video features if pre_encode=True
+            text_key (str): Key to extract text from annotation files. Defaults to "text".
+            [Other args inherited from Dataset_3D - see parent class documentation]
         """
-
-        super().__init__()
-        if mode == "train":
-            self.data_path = train_annotation_path
-            self.start_frame_interval = 1
-        elif mode == "val":
-            self.data_path = val_annotation_path
-            self.start_frame_interval = val_start_frame_interval
-        elif mode == "test":
-            self.data_path = test_annotation_path
-            self.start_frame_interval = val_start_frame_interval
-        self.video_path = video_path
-        self.fps_downsample_ratio = fps_downsample_ratio
-        self.mode = mode
-
-        # self.sequence_length = num_frames
-        self.sequence_length = 1 + num_action_per_chunk
-        self.normalize = normalize
-        self.pre_encode = pre_encode
-        self.load_t5_embeddings = load_t5_embeddings
-        self.load_action = load_action
-
-        self.cam_ids = cam_ids
-        self.accumulate_action = accumulate_action
-        self.is_rollout = is_rollout
-
-        self.action_dim = 7  # ee xyz (3) + ee euler (3) + gripper(1)
-        self.c_act_scaler = [20.0, 20.0, 20.0, 20.0, 20.0, 20.0, gripper_rescale_factor]
-        self.c_act_scaler = np.array(self.c_act_scaler, dtype=float)
-        self.ann_files = self._init_anns(self.data_path)
-        self._filter_rollout()
-
         self._text_key = text_key
-        self._state_key = state_key
-        self._gripper_key = gripper_key
-
-        print(f"{len(self.ann_files)} trajectories in total")
-        self.samples = self._init_sequences(self.ann_files)
-
-        self.samples = sorted(self.samples, key=lambda x: (x["ann_file"], x["frame_ids"][0]))
-        if debug and not do_evaluate:
-            self.samples = self.samples[0:10]
-        print(f"{len(self.ann_files)} trajectories in total")
-        print(f"{len(self.samples)} samples in total")
-        # with open('./samples_16.pkl','wb') as file:
-        #     pickle.dump(self.samples,file)
-        self.wrong_number = 0
-        self.transform = T.Compose([T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True)])
-        self.training = False
-        self.preprocess = T.Compose(
-            [
-                ToTensorVideo(),
-                Resize_Preprocess(tuple(video_size)),  # 288 512
-                T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True),
-            ]
+        super().__init__(
+            train_annotation_path=train_annotation_path,
+            val_annotation_path=val_annotation_path,
+            test_annotation_path=test_annotation_path,
+            video_path=video_path,
+            fps_downsample_ratio=fps_downsample_ratio,
+            num_action_per_chunk=num_action_per_chunk,
+            cam_ids=cam_ids,
+            accumulate_action=accumulate_action,
+            video_size=video_size,
+            val_start_frame_interval=val_start_frame_interval,
+            debug=debug,
+            normalize=normalize,
+            pre_encode=pre_encode,
+            do_evaluate=do_evaluate,
+            load_t5_embeddings=load_t5_embeddings,
+            load_action=load_action,
+            mode=mode,
+            state_key=state_key,
+            gripper_key=gripper_key,
+            gripper_rescale_factor=gripper_rescale_factor,
+            is_rollout=is_rollout,
         )
-        self.not_norm_preprocess = T.Compose([ToTensorVideo(), Resize_Preprocess(tuple(video_size))])
-
-    def __str__(self):
-        return f"{len(self.ann_files)} samples from {self.data_path}"
-
-    def _init_anns(self, data_dir):
-        ann_files = [os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.endswith(".json")]
-        return ann_files
-
-    def _init_sequences(self, ann_files):
-        samples = []
-        with ThreadPoolExecutor(32) as executor:
-            future_to_ann_file = {
-                executor.submit(self._load_and_process_ann_file, ann_file): ann_file for ann_file in ann_files
-            }
-            for future in tqdm(as_completed(future_to_ann_file), total=len(ann_files)):
-                samples.extend(future.result())
-        return samples
-
-    def _filter_rollout(self):
-        if self.is_rollout is None:
-            return
-
-        print(f"Filtering rollout: {self.is_rollout}")
-        ann_files = []
-        # Check if any file in self.ann_files has "is_eval" set to True
-        for ann_file in self.ann_files:
-            with open(ann_file, "r") as f:
-                ann_data = json.load(f)
-            is_eval = ann_data["episode_metadata"]["is_eval"]
-            if self.is_rollout and is_eval:
-                ann_files.append(ann_file)
-            elif not self.is_rollout and not is_eval:
-                ann_files.append(ann_file)
-
-        self.ann_files = ann_files
-        print(f"Filtered {len(ann_files)} rollout: {self.is_rollout}")
-        return
-
-    def _load_and_process_ann_file(self, ann_file):
-        samples = []
-        with open(ann_file, "r") as f:
-            ann = json.load(f)
-
-        n_frames = len(ann[self._state_key])
-        for frame_i in range(0, n_frames, self.start_frame_interval):
-            sample = dict()
-            sample["ann_file"] = ann_file
-            sample["frame_ids"] = []
-            curr_frame_i = frame_i
-            while True:
-                if curr_frame_i > (n_frames - 1):
-                    break
-                sample["frame_ids"].append(curr_frame_i)
-                if len(sample["frame_ids"]) == self.sequence_length:
-                    break
-                curr_frame_i += self.fps_downsample_ratio
-            # make sure there are sequence_length number of frames
-            if len(sample["frame_ids"]) == self.sequence_length:
-                samples.append(sample)
-        return samples
-
-    def __len__(self):
-        return len(self.samples)
-
-    # def _load_video(self, video_path, frame_ids):
-    #     # import pdb; pdb.set_trace()
-    #     vr = VideoReader(video_path, ctx=cpu(0), num_threads=2)
-    #     import pdb; pdb.set_trace()
-    #     assert (np.array(frame_ids) < len(vr)).all()
-    #     assert (np.array(frame_ids) >= 0).all()
-    #     vr.seek(0)
-    #     frame_data = vr.get_batch(frame_ids).asnumpy()
-    #     return frame_data
 
     def _load_video(self, video_path, frame_ids, fps=30):
         """
@@ -671,15 +533,15 @@ class Dataset_3D_avla(Dataset):
         return np.stack(frames, axis=0)
     
     def _get_frames(self, label, frame_ids, cam_id, pre_encode):
+        """Override to not use os.path.join with self.video_path."""
         if pre_encode:
             raise NotImplementedError("Pre-encoded videos are not supported for this dataset.")
         else:
             video_path = label["videos"][cam_id]["video_path"]
-            # video_path = os.path.join(self.video_path, video_path)
+            # Note: video_path is already absolute for this dataset
             frames = self._load_video(video_path, frame_ids)
             frames = frames.astype(np.uint8)
             frames = torch.from_numpy(frames).permute(0, 3, 1, 2)  # (l, c, h, w)
-            # import pdb; pdb.set_trace()
 
             def printvideo(videos, filename):
                 t_videos = rearrange(videos, "f c h w -> f h w c")
@@ -687,16 +549,15 @@ class Dataset_3D_avla(Dataset):
                     ((t_videos / 2.0 + 0.5).clamp(0, 1) * 255).detach().to(dtype=torch.uint8).cpu().contiguous().numpy()
                 )
                 print(t_videos.shape)
-                writer = imageio.get_writer(filename, fps=4)  # fps 是帧率
+                writer = imageio.get_writer(filename, fps=4)
                 for frame in t_videos:
-                    writer.append_data(frame)  # 1 4 13 23 # fp16 24 76 456 688
+                    writer.append_data(frame)
 
             if self.normalize:
                 frames = self.preprocess(frames)
             else:
                 frames = self.not_norm_preprocess(frames)
                 frames = torch.clamp(frames * 255.0, 0, 255).to(torch.uint8)
-            # import pdb; pdb.set_trace()
         return frames
 
     def _get_text(self, label):
@@ -711,6 +572,7 @@ class Dataset_3D_avla(Dataset):
         return frames, temp_cam_id
 
     def _get_robot_states(self, label, frame_ids):
+        """Override to use 7D quaternion states instead of 6D euler angles."""
         all_states = np.array(label[self._state_key])
         all_cont_gripper_states = np.array(label[self._gripper_key])
         states = all_states[frame_ids]
@@ -718,14 +580,6 @@ class Dataset_3D_avla(Dataset):
         arm_states = states[:, :7]
         assert arm_states.shape[0] == self.sequence_length
         assert cont_gripper_states.shape[0] == self.sequence_length
-        return arm_states, cont_gripper_states
-
-    def _get_all_robot_states(self, label, frame_ids):
-        all_states = np.array(label[self._state_key])
-        all_cont_gripper_states = np.array(label[self._gripper_key])
-        states = all_states[frame_ids]
-        cont_gripper_states = all_cont_gripper_states[frame_ids]
-        arm_states = states[:, :6]
         return arm_states, cont_gripper_states
 
     def _get_all_actions(self, arm_states, gripper_states, accumulate_action):
@@ -788,7 +642,6 @@ class Dataset_3D_avla(Dataset):
             for k in range(1, self.sequence_length):
                 prev_xyz = arm_states[k - 1, 0:3]
                 prev_quat = arm_states[k - 1, 3:7]
-                # import pdb; pdb.set_trace()
                 prev_rotm = quat2rotm(prev_quat)
                 curr_xyz = arm_states[k, 0:3]
                 curr_quat = arm_states[k, 3:7]
@@ -826,16 +679,12 @@ class Dataset_3D_avla(Dataset):
                 raise NotImplementedError("Pre-encoded videos are not supported for this dataset.")
             else:
                 video, cam_id = self._get_obs(label, frame_ids, cam_id, pre_encode=False)
-                # print(video.shape)
-                # assert 0
                 video = video.permute(1, 0, 2, 3)  # Rearrange from [T, C, H, W] to [C, T, H, W]
                 data["video"] = video.to(dtype=torch.uint8)
 
 
             data["annotation_file"] = ann_file
             data["text"] = text
-
-            # print("loaded text")
 
             # NOTE: __key__ is used to uniquely identify the sample, required for callback functions
             if "episode_index" in label:
@@ -861,8 +710,6 @@ class Dataset_3D_avla(Dataset):
             data["image_size"] = 256 * torch.ones(4).cuda()
             data["num_frames"] = self.sequence_length
             data["padding_mask"] = torch.zeros(1, 256, 256).cuda()
-            # import pdb; pdb.set_trace()
-            # print("return data")
             return data
         except Exception:
             warnings.warn(

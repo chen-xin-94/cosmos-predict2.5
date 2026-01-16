@@ -444,7 +444,6 @@ for _item in [
         for variant_name, variant_config in variants:
             _item_variant = deepcopy(_item)
             # Apply all overrides from variant_config
-            # import pdb; pdb.set_trace()
             for key, value in variant_config.items():
                 _item_variant = apply_kv_to_config(_item_variant, key, value)
 

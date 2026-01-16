@@ -266,7 +266,6 @@ def main():
     if args.context_parallel_size > 1:
         rank0 = distributed.get_rank() == 0
 
-    # pdb.set_trace()
     video_list = glob(os.path.join(input_video_path, "*.mp4"))
     input_json_list = [video_path.replace(".mp4", "_actions.npy") for video_path in video_list]
 

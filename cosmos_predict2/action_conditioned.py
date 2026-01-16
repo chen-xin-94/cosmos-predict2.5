@@ -183,59 +183,6 @@ def load_default_action_fn():
     return load_fn
 
 
-def load_image_action_fn():
-    """
-    Load given image as initial frame
-    """
-
-    def load_fn(
-        json_data: dict,
-        video_path: str,
-        args: ActionConditionedInferenceArguments,
-    ) -> dict:
-        """
-        Load action data from JSON and prepare it for inference.
-
-        Args:
-            json_data: JSON data containing robot states
-            video_path: Path to the video file
-            args: Inference arguments
-
-        Returns:
-            Dictionary containing actions, video data, and metadata
-        """
-        # Get action sequence from states
-        actions = get_action_sequence_from_states(
-            json_data,
-            fps_downsample_ratio=args.fps_downsample_ratio,
-            state_key=args.state_key,
-            gripper_scale=args.gripper_scale,
-            gripper_key=args.gripper_key,
-            action_scaler=args.action_scaler,
-            use_quat=args.use_quat,
-        )
-
-        # Load video
-        img_array = mediapy.read_image("/raid/yusong.li/workspace/cosmos-predict2.5_df/assets/action_conditioned/novel/1000-2.png")
-
-        # Resize if specified
-        if args.resolution != "none":
-            try:
-                h, w = map(int, args.resolution.split(","))
-                img_array = mediapy.resize_image(img_array, (h, w))
-            except Exception as e:
-                logger.warning(f"Failed to resize image to {args.resolution}: {e}")
-
-        return {
-            "actions": actions,
-            "initial_frame": img_array,
-            "video_array": None,
-            "video_path": None,
-        }
-
-    return load_fn
-
-
 def load_callable(name: str):
     """Load a callable function from a module path string."""
     from importlib import import_module

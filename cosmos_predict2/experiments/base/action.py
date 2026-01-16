@@ -23,11 +23,98 @@ from cosmos_predict2.config import MODEL_CHECKPOINTS, ModelKey
 DEFAULT_CHECKPOINT = MODEL_CHECKPOINTS[ModelKey()]  # This uses post_trained=True by default
 
 
+# Base configuration for 2B action-conditioned models with rectified flow
+_ac_reason_embeddings_rectified_flow_2b_256_320_base = dict(
+    defaults=[
+        DEFAULT_CHECKPOINT.experiment,
+        {"override /model": "action_conditioned_video2world_fsdp_rectified_flow"},
+        {"override /net": "cosmos_v1_2B_action_conditioned"},
+        {"override /conditioner": "action_conditioned_video_conditioner"},
+        "_self_",
+    ],
+    job=dict(
+        project="cosmos_predict2_action_conditioned",
+        group="cosmos_predict_v2p5",
+    ),
+    optimizer=dict(
+        lr=2 ** (-14.5),  # 2**(-14.5) = 3.0517578125e-05
+        weight_decay=0.1,
+    ),
+    checkpoint=dict(
+        # pyrefly: ignore  # missing-attribute
+        load_path=get_checkpoint_path(DEFAULT_CHECKPOINT.s3.uri),
+        load_training_state=False,
+        strict_resume=False,
+        load_from_object_store=dict(
+            enabled=False,
+        ),
+        save_to_object_store=dict(
+            enabled=False,
+        ),
+    ),
+    trainer=dict(
+        straggler_detection=dict(enabled=False),
+        callbacks=dict(
+            every_n_sample_reg=dict(
+                every_n=5000,
+                do_x0_prediction=False,
+                guidance=[0, 3, 7],
+                fps=16,
+                save_s3=False,
+            ),
+            every_n_sample_ema=dict(
+                every_n=5000,
+                do_x0_prediction=False,
+                guidance=[0, 3, 7],
+                fps=16,
+                save_s3=False,
+            ),
+            heart_beat=dict(
+                save_s3=False,
+            ),
+            iter_speed=dict(
+                hit_thres=100,
+                save_s3=False,
+            ),
+            device_monitor=dict(
+                save_s3=False,
+            ),
+            wandb=dict(
+                save_s3=False,
+            ),
+            wandb_10x=dict(
+                save_s3=False,
+            ),
+            dataloader_speed=dict(
+                save_s3=False,
+            ),
+        ),
+    ),
+    model_parallel=dict(
+        context_parallel_size=1,
+    ),
+    model=dict(
+        config=dict(
+            # NOTE: this should be 1 for the action conditioned model
+            min_num_conditional_frames=1,
+            max_num_conditional_frames=1,
+            # overwrite the probs to disable random num of conditional frames
+            conditional_frames_probs=None,
+            state_t=1 + 12 // 4,
+            net=dict(
+                action_dim=7,
+                num_action_per_chunk=12,
+            ),
+        ),
+    ),
+)
+
 """
 torchrun --nproc_per_node=1 --master_port=12341 -m scripts.train --config=cosmos_predict2/_src/predict2/action/configs/action_conditioned/config.py  -- experiment=ac_reason_embeddings_rectified_flow_2b_256_320
 """
 ac_reason_embeddings_rectified_flow_2b_256_320 = LazyDict(
     dict(
+        **_ac_reason_embeddings_rectified_flow_2b_256_320_base,
         defaults=[
             DEFAULT_CHECKPOINT.experiment,
             {"override /model": "action_conditioned_video2world_fsdp_rectified_flow"},
@@ -42,77 +129,8 @@ ac_reason_embeddings_rectified_flow_2b_256_320 = LazyDict(
             group="cosmos_predict_v2p5",
             name="2b_bridge_action_conditioned",
         ),
-        optimizer=dict(
-            lr=2 ** (-14.5),  # 2**(-14.5) = 3.0517578125e-05
-            weight_decay=0.1,
-        ),
         checkpoint=dict(
-            save_iter= 2_000,
-            # pyrefly: ignore  # missing-attribute
-            load_path=get_checkpoint_path(DEFAULT_CHECKPOINT.s3.uri),
-            load_training_state=False,
-            strict_resume=False,
-            load_from_object_store=dict(
-                enabled=False,
-            ),
-            save_to_object_store=dict(
-                enabled=False,
-            ),
-        ),
-        trainer=dict(
-            straggler_detection=dict(enabled=False),
-            callbacks=dict(
-                every_n_sample_reg=dict(
-                    every_n=5000,
-                    do_x0_prediction=False,
-                    guidance=[0, 3, 7],
-                    fps=16,
-                    save_s3=False,
-                ),
-                every_n_sample_ema=dict(
-                    every_n=5000,
-                    do_x0_prediction=False,
-                    guidance=[0, 3, 7],
-                    fps=16,
-                    save_s3=False,
-                ),
-                heart_beat=dict(
-                    save_s3=False,
-                ),
-                iter_speed=dict(
-                    hit_thres=100,
-                    save_s3=False,
-                ),
-                device_monitor=dict(
-                    save_s3=False,
-                ),
-                wandb=dict(
-                    save_s3=False,
-                ),
-                wandb_10x=dict(
-                    save_s3=False,
-                ),
-                dataloader_speed=dict(
-                    save_s3=False,
-                ),
-            ),
-        ),
-        model_parallel=dict(
-            context_parallel_size=1,
-        ),
-        model=dict(
-            config=dict(
-                # NOTE: this should be 1 for the action conditioned model
-                min_num_conditional_frames=1,
-                max_num_conditional_frames=1,
-                # overwrite the probs to disable random num of conditional frames
-                conditional_frames_probs=None,
-                state_t=1 + 12 // 4,
-                net=dict(
-                    action_dim=7,
-                    num_action_per_chunk=12,
-                ),
-            ),
+            save_iter=2_000,
         ),
         dataloader_train=dict(
             batch_size=2,
@@ -128,8 +146,9 @@ ac_reason_embeddings_rectified_flow_2b_256_320 = LazyDict(
 """
 torchrun --nproc_per_node=1 --master_port=12341 -m scripts.train --config=cosmos_predict2/_src/predict2/action/configs/action_conditioned/config.py  -- experiment=ac_reason_embeddings_rectified_flow_2b_256_320_avla ~dataloader_train.dataloaders
 """
-ac_reason_embeddings_rectified_flow_2b_256_320_avla = LazyDict(
+ac_reason_embeddings_rectified_flow_2b_256_320_df = LazyDict(
     dict(
+        **_ac_reason_embeddings_rectified_flow_2b_256_320_base,
         defaults=[
             DEFAULT_CHECKPOINT.experiment,
             {"override /model": "action_conditioned_video2world_fsdp_rectified_flow"},
@@ -144,77 +163,14 @@ ac_reason_embeddings_rectified_flow_2b_256_320_avla = LazyDict(
             group="cosmos_predict_v2p5",
             name="2b_avla_action_wo_text_conditioned_10k_bs4_debugging",
         ),
-        optimizer=dict(
-            lr=2 ** (-14.5),  # 2**(-14.5) = 3.0517578125e-05
-            weight_decay=0.1,
-        ),
         checkpoint=dict(
-            save_iter= 2_500, # 2_000,
-            # pyrefly: ignore  # missing-attribute
-            load_path=get_checkpoint_path(DEFAULT_CHECKPOINT.s3.uri),
-            load_training_state=False,
-            strict_resume=False,
-            load_from_object_store=dict(
-                enabled=False,
-            ),
-            save_to_object_store=dict(
-                enabled=False,
-            ),
+            save_iter=2_500,
         ),
         trainer=dict(
             max_iter=1_000,
-            straggler_detection=dict(enabled=False),
-            callbacks=dict(
-                every_n_sample_reg=dict(
-                    every_n=5000,
-                    do_x0_prediction=False,
-                    guidance=[0, 3, 7],
-                    fps=16,
-                    save_s3=False,
-                ),
-                every_n_sample_ema=dict(
-                    every_n=5000,
-                    do_x0_prediction=False,
-                    guidance=[0, 3, 7],
-                    fps=16,
-                    save_s3=False,
-                ),
-                heart_beat=dict(
-                    save_s3=False,
-                ),
-                iter_speed=dict(
-                    hit_thres=100,
-                    save_s3=False,
-                ),
-                device_monitor=dict(
-                    save_s3=False,
-                ),
-                wandb=dict(
-                    save_s3=False,
-                ),
-                wandb_10x=dict(
-                    save_s3=False,
-                ),
-                dataloader_speed=dict(
-                    save_s3=False,
-                ),
-            ),
-        ),
-        model_parallel=dict(
-            context_parallel_size=1,
         ),
         model=dict(
             config=dict(
-                # NOTE: this should be 1 for the action conditioned model
-                min_num_conditional_frames=1,
-                max_num_conditional_frames=1,
-                # overwrite the probs to disable random num of conditional frames
-                conditional_frames_probs=None,
-                state_t=1 + 12 // 4,
-                net=dict(
-                    action_dim=7,
-                    num_action_per_chunk=12,
-                ),
                 conditioner=dict(
                     text=dict(
                         use_prompt=False,
@@ -236,7 +192,7 @@ ac_reason_embeddings_rectified_flow_2b_256_320_avla = LazyDict(
 
 cs = ConfigStore.instance()
 
-for _item in [ac_reason_embeddings_rectified_flow_2b_256_320_avla]:
+for _item in [ac_reason_embeddings_rectified_flow_2b_256_320_df]:
     # Get the experiment name from the global variable
     experiment_name = [name.lower() for name, value in globals().items() if value is _item][0]  # noqa: RUF015
 
