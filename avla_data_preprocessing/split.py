@@ -3,7 +3,7 @@ import random
 import shutil
 
 # processed_json directory
-processed_dir = "/raid/yusong/workspace/cosmos-predict2.5_df/cosmos_predict2/datasets/df/avla_nov_8_merged_per_embodiment_2025-11-12/fr3_single_arm_franka_hand/annotation/processed_json"
+processed_dir = "/raid/yusong.li/workspace/cosmos-predict2.5_df/cosmos_predict2/datasets/df/avla_nov_8_merged_per_embodiment_2025-11-12/fr3_single_arm_franka_hand/annotation/processed_json"
 
 # Parent directory (annotation/)
 parent_dir = os.path.dirname(processed_dir)
@@ -22,6 +22,9 @@ all_files = [f for f in os.listdir(processed_dir) if f.endswith(".json")]
 
 total = len(all_files)
 print(f"Found {total} JSON files in processed_json/.")
+
+# Set random seed for reproducibility
+random.seed(28)
 
 # Shuffle files
 random.shuffle(all_files)

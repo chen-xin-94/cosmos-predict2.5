@@ -37,7 +37,7 @@ where the exact commands are
 export IMAGINAIRE_OUTPUT_ROOT=/raid/.../cosmos-predict2.5/imaginaire-output
 export CUDA_VISIBLE_DEVICES=0
 
-torchrun --nproc_per_node=1 --master_port=$((12000 + RANDOM % 10000)) -m scripts.train --config=cosmos_predict2/_src/predict2/action/configs/action_conditioned/config.py  -- experiment=ac_reason_embeddings_rectified_flow_2b_256_320_avla ~dataloader_train.dataloaders
+torchrun --nproc_per_node=1 --master_port=$((12000 + RANDOM % 10000)) -m scripts.train --config=cosmos_predict2/_src/predict2/action/configs/action_conditioned/config.py  -- experiment=ac_reason_embeddings_rectified_flow_2b_256_320_df ~dataloader_train.dataloaders
 ```
 With this setting, the checkpoint will be saved under `cosmos-predict2.5/imaginaire-output`
 
@@ -62,7 +62,7 @@ export CUDA_VISIBLE_DEVICES=0
 python examples/action_conditioned.py \
 -i cosmos_predict2/datasets/df/avla_nov_8_merged_per_embodiment_2025-11-12/fr3_single_arm_franka_hand/inference_params.json \
 -o outputs/action_conditioned/avla_franka_single_arm_bf16_w_new_text_12.5k_novel_image2 \
---experiment ac_reason_embeddings_rectified_flow_2b_256_320_avla \
+--experiment ac_reason_embeddings_rectified_flow_2b_256_320_df \
 --checkpoint-path $CHECKPOINT_DIR/model_ema_bf16.pt \
 ```
 
