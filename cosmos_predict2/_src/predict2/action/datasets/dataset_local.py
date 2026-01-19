@@ -563,14 +563,6 @@ class Dataset_3D_df(Dataset_3D):
     def _get_text(self, label):
         return label[self._text_key]
 
-    def _get_obs(self, label, frame_ids, cam_id, pre_encode):
-        if cam_id is None:
-            temp_cam_id = random.choice(self.cam_ids)
-        else:
-            temp_cam_id = cam_id
-        frames = self._get_frames(label, frame_ids, cam_id=temp_cam_id, pre_encode=pre_encode)
-        return frames, temp_cam_id
-
     def _get_robot_states(self, label, frame_ids):
         """Override to use 7D quaternion states instead of 6D euler angles."""
         all_states = np.array(label[self._state_key])
