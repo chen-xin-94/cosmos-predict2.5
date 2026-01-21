@@ -41,6 +41,8 @@ ac_reason_embeddings_rectified_flow_2b_256_320 = LazyDict(
             project="cosmos_predict2_action_conditioned",
             group="cosmos_predict_v2p5",
             name="2b_bridge_action_conditioned",
+            # wandb_mode="online",
+            wandb_mode="disabled",
         ),
         optimizer=dict(
             lr=2 ** (-14.5),  # 2**(-14.5) = 3.0517578125e-05
@@ -161,10 +163,79 @@ ac_reason_embeddings_rectified_flow_2b_256_320_df = LazyDict(
 )
 
 
+"""
+Multi-view 3-camera action-conditioned training
+Resolution: 448x1344 (3 views of 448x448 concatenated along width)
+
+torchrun --nproc_per_node=1 --master_port=12341 -m scripts.train --config=cosmos_predict2/_src/predict2/action/configs/action_conditioned/config.py  -- experiment=ac_reason_embeddings_rectified_flow_2b_multiview_448_1344 ~dataloader_train.dataloaders
+"""
+ac_reason_embeddings_rectified_flow_2b_multiview_448_1344 = LazyDict(
+    dict(
+        defaults=[
+            DEFAULT_CHECKPOINT.experiment,  # Use the checkpoint's experiment directly
+            {"override /model": "action_conditioned_video2world_fsdp_rectified_flow"},
+            {"override /net": "cosmos_v1_2B_action_conditioned"},
+            {"override /conditioner": "action_conditioned_video_conditioner"},
+            {"override /data_train": "avla_franka_multiview_13frame_448_1344_train"},
+            {"override /data_val": "avla_franka_multiview_13frame_448_1344_val"},
+            "_self_",
+        ],
+        job=dict(
+            project="cosmos_predict2_action_conditioned",
+            group="cosmos_predict_v2p5",
+            name="2b_avla_multiview_action_conditioned_448",
+        ),
+        optimizer=dict(
+            lr=2 ** (-14.5),
+            weight_decay=0.1,
+        ),
+        checkpoint=dict(
+            save_iter=1_000,
+            load_path=get_checkpoint_path(DEFAULT_CHECKPOINT.s3.uri),
+            load_training_state=False,
+            strict_resume=False,
+            load_from_object_store=dict(enabled=False),
+            save_to_object_store=dict(enabled=False),
+        ),
+        trainer=dict(
+            max_iter=10_000,
+            logging_iter=10,
+            straggler_detection=dict(enabled=False),
+            callbacks=dict(
+                every_n_sample_reg=dict(every_n=1_000, do_x0_prediction=False, guidance=[0, 3, 7], fps=16, save_s3=False),
+                every_n_sample_ema=dict(every_n=1_000, do_x0_prediction=False, guidance=[0, 3, 7], fps=16, save_s3=False),
+                heart_beat=dict(save_s3=False),
+                iter_speed=dict(hit_thres=5, every_n=1, save_s3=False),
+                device_monitor=dict(save_s3=False),
+                wandb=dict(save_s3=False),
+                wandb_10x=dict(save_s3=False),
+                dataloader_speed=dict(save_s3=False),
+            ),
+        ),
+        model_parallel=dict(context_parallel_size=1),
+        model=dict(
+            config=dict(
+                min_num_conditional_frames=1,
+                max_num_conditional_frames=1,
+                conditional_frames_probs=None,
+                state_t=1 + 12 // 4,
+                net=dict(action_dim=7, num_action_per_chunk=12),
+                conditioner=dict(text=dict(use_prompt=True)),  # Enable text conditioning
+            ),
+        ),
+        dataloader_train=dict(
+            batch_size=2,
+            sampler=dict(dataset=dict(fps_downsample_ratio=6, video_size=[448, 448])),
+            dataset=dict(fps_downsample_ratio=6, video_size=[448, 448]),
+        ),
+    ),
+    flags={"allow_objects": True},
+)
+
 
 cs = ConfigStore.instance()
 
-for _item in [ac_reason_embeddings_rectified_flow_2b_256_320_df]:
+for _item in [ac_reason_embeddings_rectified_flow_2b_256_320_df, ac_reason_embeddings_rectified_flow_2b_multiview_448_1344]:
     # Get the experiment name from the global variable
     experiment_name = [name.lower() for name, value in globals().items() if value is _item][0]  # noqa: RUF015
 
