@@ -48,16 +48,25 @@ def process_single_parquet(parquet_path, save_path, episode_index, chunk_name):
     # Keep ALL frames (no downsampling)
     df_filtered = df.reset_index(drop=True)
 
-    # Absolute video path
-    video_abs_path = os.path.join(
-        root_video_dir,
-        chunk_name,
+    # Define camera view folder names
+    camera_views = [
         "observation.images.frame_camera_left",
-        f"episode_{episode_index:06d}.mp4",
-    )
+        "observation.images.frame_camera_top",
+        "observation.images.wrist_camera",
+    ]
 
-    if not os.path.exists(video_abs_path):
-        print(f"[WARNING] Missing video file: {video_abs_path}")
+    # Build videos list with all camera views
+    videos_list = []
+    for cam_view in camera_views:
+        video_abs_path = os.path.join(
+            root_video_dir,
+            chunk_name,
+            cam_view,
+            f"episode_{episode_index:06d}.mp4",
+        )
+        if not os.path.exists(video_abs_path):
+            print(f"[WARNING] Missing video file: {video_abs_path}")
+        videos_list.append({"video_path": video_abs_path})
 
     # Episode metadata
     meta = episode_meta.get(episode_index, {"task": "", "text": ""})
@@ -66,7 +75,7 @@ def process_single_parquet(parquet_path, save_path, episode_index, chunk_name):
     output = {
         "task": meta["task"],
         "text": meta["text"],
-        "videos": [{"video_path": video_abs_path}],
+        "videos": videos_list,
         "state": [],
         "continuous_gripper_state": [],
         "episode_index": episode_index,
