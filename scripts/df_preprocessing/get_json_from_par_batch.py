@@ -1,13 +1,29 @@
 import os
 import pandas as pd
 import json
+import argparse
 
 # === Base Paths ===
-data_root = "/mnt/central_storage/data_pool/data_foundry/avla-dataset-nov-24_merged_per_embodiment/fr3_single_arm_franka_hand"
+parser = argparse.ArgumentParser(description="Convert parquet episodes to JSON annotations.")
+parser.add_argument(
+    "--dataset-subdir",
+    default="avla_nov_8_merged_per_embodiment_2025-11-12/fr3_single_arm_franka_hand",
+    help="Dataset subdirectory under the data_foundry root.",
+)
+args = parser.parse_args()
+
+data_root = os.path.join(
+    "/mnt/central_storage/data_pool/data_foundry",
+    args.dataset_subdir,
+)
 root_parquet_dir = os.path.join(data_root, "data")
 root_video_dir = os.path.join(data_root, "videos")
 
-output_root = "/raid/chen.xin/repo/cosmos-predict2.5/datasets/df/avla-dataset-nov-24_merged_per_embodiment/fr3_single_arm_franka_hand/annotation/processed_json"
+output_root = os.path.join(
+    "/raid/chen.xin/repo/cosmos-predict2.5/datasets/df",
+    args.dataset_subdir,
+    "annotation/processed_json",
+)
 os.makedirs(output_root, exist_ok=True)
 
 meta_path = os.path.join(data_root, "meta/episodes.jsonl")
