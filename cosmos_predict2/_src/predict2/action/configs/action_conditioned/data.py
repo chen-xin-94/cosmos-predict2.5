@@ -30,7 +30,7 @@ except ImportError:
     register_gr00t_customized_gr1_data = None
 
 # bridge dataset path
-base_path = "cosmos_predict2/datasets/df/avla_nov_8_merged_per_embodiment_2025-11-12/fr3_single_arm_franka_hand"
+base_path = "datasets/df/avla_nov_8_merged_per_embodiment_2025-11-12/fr3_single_arm_franka_hand"
 
 train_annotation_path = os.path.join(base_path, "annotation/train")
 val_annotation_path = os.path.join(base_path, "annotation/val")
@@ -218,6 +218,53 @@ avla_franka_single_arm_13frame_480_640_val_dataloader = L(DataLoader)(
 ################################################
 
 
+################### Multi-View AVLA Dataset (3 views, width-concatenated) ###################
+# Import the multi-view dataset class
+from cosmos_predict2._src.predict2.action.datasets.dataset_mv_local import ActionConditionedMultiViewDataset_df
+
+# Multi-view 3-camera dataset: 448x1344 (3x448 width)
+avla_franka_multiview_13frame_448_1344_train_dataset = L(ActionConditionedMultiViewDataset_df)(
+    train_annotation_path=train_annotation_path,
+    val_annotation_path=val_annotation_path,
+    test_annotation_path=test_annotation_path,
+    video_path=base_path,
+    fps_downsample_ratio=1,
+    num_action_per_chunk=12,
+    cam_ids=[0, 1, 2],  # All 3 cameras: left, top, wrist
+    accumulate_action=False,
+    video_size=[448, 448],  # Native resolution per view, concat to 448x1344
+    val_start_frame_interval=1,
+    mode="train",
+)
+avla_franka_multiview_13frame_448_1344_val_dataset = L(ActionConditionedMultiViewDataset_df)(
+    train_annotation_path=train_annotation_path,
+    val_annotation_path=val_annotation_path,
+    test_annotation_path=test_annotation_path,
+    video_path=base_path,
+    fps_downsample_ratio=1,
+    num_action_per_chunk=12,
+    cam_ids=[0, 1, 2],  # All 3 cameras: left, top, wrist
+    accumulate_action=False,
+    video_size=[448, 448],  # Native resolution per view, concat to 448x1344
+    val_start_frame_interval=100,
+    mode="val",
+)
+
+avla_franka_multiview_13frame_448_1344_train_dataloader = L(DataLoader)(
+    dataset=avla_franka_multiview_13frame_448_1344_train_dataset,
+    sampler=L(get_sampler)(dataset=avla_franka_multiview_13frame_448_1344_train_dataset),
+    batch_size=1,
+    drop_last=True,
+)
+avla_franka_multiview_13frame_448_1344_val_dataloader = L(DataLoader)(
+    dataset=avla_franka_multiview_13frame_448_1344_val_dataset,
+    sampler=L(get_sampler)(dataset=avla_franka_multiview_13frame_448_1344_val_dataset),
+    batch_size=1,
+    drop_last=True,
+)
+################################################
+
+
 
 def register_training_and_val_data():
     cs = ConfigStore.instance()
@@ -264,6 +311,21 @@ def register_training_and_val_data():
         node=avla_franka_single_arm_13frame_480_640_val_dataloader,
     )
 
+    # Multi-view 3-camera 13 frame 448x1344
+    cs.store(
+        group="data_train",
+        package="dataloader_train",
+        name="avla_franka_multiview_13frame_448_1344_train",
+        node=avla_franka_multiview_13frame_448_1344_train_dataloader,
+    )
+    cs.store(
+        group="data_val",
+        package="dataloader_val",
+        name="avla_franka_multiview_13frame_448_1344_val",
+        node=avla_franka_multiview_13frame_448_1344_val_dataloader,
+    )
+
     # Register gr00t_customized_gr1 data
     if register_gr00t_customized_gr1_data is not None:
         register_gr00t_customized_gr1_data()
+
