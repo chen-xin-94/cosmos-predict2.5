@@ -1,7 +1,10 @@
-import os
-import pandas as pd
-import json
 import argparse
+import json
+import os
+
+import pandas as pd
+
+# TODO: multiprocessing for speedup
 
 # === Base Paths ===
 parser = argparse.ArgumentParser(description="Convert parquet episodes to JSON annotations.")

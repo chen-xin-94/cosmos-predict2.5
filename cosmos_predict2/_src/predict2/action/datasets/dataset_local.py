@@ -28,8 +28,8 @@ import time
 import traceback
 import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import ffmpeg
 
+import ffmpeg
 import imageio
 import numpy as np
 import torch
@@ -40,7 +40,13 @@ from torchvision import transforms as T
 from tqdm import tqdm
 
 from cosmos_predict2._src.imaginaire.flags import INTERNAL
-from cosmos_predict2._src.imaginaire.utils.dataset_utils import Resize_Preprocess, ToTensorVideo, euler2rotm, rotm2euler, quat2rotm
+from cosmos_predict2._src.imaginaire.utils.dataset_utils import (
+    Resize_Preprocess,
+    ToTensorVideo,
+    euler2rotm,
+    quat2rotm,
+    rotm2euler,
+)
 
 
 class Dataset_3D(Dataset):
