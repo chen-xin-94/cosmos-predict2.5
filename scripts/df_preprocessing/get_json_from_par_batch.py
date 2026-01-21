@@ -3,14 +3,14 @@ import pandas as pd
 import json
 
 # === Base Paths ===
-data_root = "/mnt/central_storage/data_pool/data_foundry/avla_nov_8_merged_per_embodiment_2025-11-12/fr3_single_arm_franka_hand"
+data_root = "/mnt/central_storage/data_pool/data_foundry/avla-dataset-nov-24_merged_per_embodiment/fr3_single_arm_franka_hand"
 root_parquet_dir = os.path.join(data_root, "data")
 root_video_dir = os.path.join(data_root, "videos")
 
-output_root = "/raid/yusong/workspace/cosmos-predict2.5_df/cosmos_predict2/datasets/df/avla_nov_8_merged_per_embodiment_2025-11-12/fr3_single_arm_franka_hand/annotation/processed_json"
+output_root = "/raid/chen.xin/repo/cosmos-predict2.5/datasets/df/avla-dataset-nov-24_merged_per_embodiment/fr3_single_arm_franka_hand/annotation/processed_json"
 os.makedirs(output_root, exist_ok=True)
 
-meta_path = os.path.join(data_root, "meta/episodes_original.jsonl")
+meta_path = os.path.join(data_root, "meta/episodes.jsonl")
 
 
 # ------------------------------------------------------------
