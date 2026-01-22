@@ -20,6 +20,7 @@ from hydra.core.config_store import ConfigStore
 
 from cosmos_predict2._src.imaginaire.lazy_config import LazyCall as L
 from cosmos_predict2._src.predict2.datasets.local_datasets.dataset_video import get_generic_dataloader, get_sampler
+from cosmos_predict2._src.predict2_multiview.datasets.action_local import ActionMultiViewDatasetDF
 from cosmos_predict2._src.predict2_multiview.datasets.local import WaymoLocalDataset
 from cosmos_predict2._src.predict2_multiview.datasets.multiview import AugmentationConfig, collate_fn
 
@@ -102,6 +103,81 @@ def register_waymo_dataloader() -> None:
         node=L(get_generic_dataloader)(
             dataset=waymo_dataset,
             sampler=L(get_sampler)(dataset=waymo_dataset) if dist.is_initialized() else None,
+            collate_fn=collate_fn,
+            batch_size=1,
+            drop_last=True,
+            num_workers=4,
+            pin_memory=True,
+        ),
+    )
+
+
+def register_awam_dataloader() -> None:
+    """Register local file-based AWAM dataloader configurations."""
+
+    cs = ConfigStore.instance()
+
+    # Action multiview local dataset (AVLA-style JSONs with 3 views)
+    base_path = "datasets/df/avla_nov_8_merged_per_embodiment_2025-11-12/fr3_single_arm_franka_hand"
+    # base_path = "datasets_example/df/avla_nov_8_merged_per_embodiment_2025-11-12/fr3_single_arm_franka_hand"
+
+    annotation_path = f"{base_path}/annotation"
+    avla_action_multiview_dataset = L(ActionMultiViewDatasetDF)(
+        train_annotation_path=f"{annotation_path}/train",
+        val_annotation_path=f"{annotation_path}/val",
+        test_annotation_path=f"{annotation_path}/test",
+        video_path="",  # Absolute paths in JSON
+        fps_downsample_ratio=1,
+        num_action_per_chunk=12,
+        cam_ids=[0, 1, 2],
+        camera_keys=["frame_camera_left", "frame_camera_top", "wrist_camera"],
+        accumulate_action=False,
+        video_size=[448, 448],
+        val_start_frame_interval=100,
+        mode="train",
+        state_key="state",
+        gripper_key="continuous_gripper_state",
+        text_key="text",
+    )
+    avla_action_multiview_val_dataset = L(ActionMultiViewDatasetDF)(
+        train_annotation_path=f"{annotation_path}/train",
+        val_annotation_path=f"{annotation_path}/val",
+        test_annotation_path=f"{annotation_path}/test",
+        video_path="",
+        fps_downsample_ratio=1,
+        num_action_per_chunk=12,
+        cam_ids=[0, 1, 2],
+        camera_keys=["frame_camera_left", "frame_camera_top", "wrist_camera"],
+        accumulate_action=False,
+        video_size=[448, 448],
+        val_start_frame_interval=100,
+        mode="val",
+        state_key="state",
+        gripper_key="continuous_gripper_state",
+        text_key="text",
+    )
+
+    cs.store(
+        group="data_train",
+        package="dataloader_train",
+        name="avla_action_multiview_13frame_448_448_train",
+        node=L(get_generic_dataloader)(
+            dataset=avla_action_multiview_dataset,
+            sampler=L(get_sampler)(dataset=avla_action_multiview_dataset) if dist.is_initialized() else None,
+            collate_fn=collate_fn,
+            batch_size=1,
+            drop_last=True,
+            num_workers=4,
+            pin_memory=True,
+        ),
+    )
+    cs.store(
+        group="data_val",
+        package="dataloader_val",
+        name="avla_action_multiview_13frame_448_448_val",
+        node=L(get_generic_dataloader)(
+            dataset=avla_action_multiview_val_dataset,
+            sampler=L(get_sampler)(dataset=avla_action_multiview_val_dataset) if dist.is_initialized() else None,
             collate_fn=collate_fn,
             batch_size=1,
             drop_last=True,

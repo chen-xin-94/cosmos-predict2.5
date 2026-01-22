@@ -37,6 +37,25 @@ from cosmos_predict2._src.predict2.networks.minimal_v4_dit import (
 )
 
 
+class Mlp(nn.Module):
+    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.0):
+        super().__init__()
+        out_features = out_features or in_features
+        hidden_features = hidden_features or in_features
+        self.fc1 = nn.Linear(in_features, hidden_features)
+        self.activation = act_layer()
+        self.fc2 = nn.Linear(hidden_features, out_features)
+        self.drop = nn.Dropout(drop)
+
+    def forward(self, x):
+        x = self.fc1(x)
+        x = self.activation(x)
+        x = self.drop(x)
+        x = self.fc2(x)
+        x = self.drop(x)
+        return x
+
+
 class MultiViewCrossAttention(Attention):
     def __init__(self, *args, state_t: int = None, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -276,6 +295,8 @@ class MultiViewDiT(MinimalV1LVGDiT):
         n_cameras_emb: int,
         view_condition_dim: int,
         concat_view_embedding: bool,
+        action_dim: Optional[int] = None,
+        num_action_per_chunk: int = 0,
         layer_mask: Optional[List[bool]] = None,
         sac_config: SACConfig = SACConfig(),
         **kwargs,
@@ -317,6 +338,27 @@ class MultiViewDiT(MinimalV1LVGDiT):
                 for _ in range(self.num_blocks)
             ]
         )
+
+        self.use_action_conditioning = action_dim is not None
+        self.action_dim = action_dim
+        self.num_action_per_chunk = num_action_per_chunk
+        if self.use_action_conditioning:
+            if self.num_action_per_chunk <= 0:
+                raise ValueError("num_action_per_chunk must be > 0 when action_dim is set")
+            self.action_embedder_B_D = Mlp(
+                in_features=self.action_dim * self.num_action_per_chunk,
+                hidden_features=self.model_channels * 4,
+                out_features=self.model_channels,
+                act_layer=lambda: nn.GELU(approximate="tanh"),
+                drop=0,
+            )
+            self.action_embedder_B_3D = Mlp(
+                in_features=self.action_dim * self.num_action_per_chunk,
+                hidden_features=self.model_channels * 4,
+                out_features=self.model_channels * 3,
+                act_layer=lambda: nn.GELU(approximate="tanh"),
+                drop=0,
+            )
 
         if self.concat_view_embedding:
             self.view_embeddings = nn.Embedding(self.n_cameras_emb, view_condition_dim)
@@ -517,6 +559,7 @@ class MultiViewDiT(MinimalV1LVGDiT):
         padding_mask: Optional[torch.Tensor] = None,
         data_type: Optional[DataType] = DataType.VIDEO,
         view_indices_B_T: Optional[torch.Tensor] = None,
+        action: Optional[torch.Tensor] = None,
         intermediate_feature_ids: Optional[List[int]] = None,
         **kwargs,
     ) -> torch.Tensor | List[torch.Tensor] | Tuple[torch.Tensor, List[torch.Tensor]]:
@@ -546,6 +589,13 @@ class MultiViewDiT(MinimalV1LVGDiT):
             if timesteps_B_T.ndim == 1:
                 timesteps_B_T = timesteps_B_T.unsqueeze(1)
             t_embedding_B_T_D, adaln_lora_B_T_3D = self.t_embedder(timesteps_B_T)
+            if self.use_action_conditioning:
+                assert action is not None, "action must be provided for action-conditioned multiview"
+                action = rearrange(action, "b t d -> b 1 (t d)")
+                action_emb_B_D = self.action_embedder_B_D(action)
+                action_emb_B_3D = self.action_embedder_B_3D(action)
+                t_embedding_B_T_D = t_embedding_B_T_D + action_emb_B_D
+                adaln_lora_B_T_3D = adaln_lora_B_T_3D + action_emb_B_3D
             t_embedding_B_T_D = self.t_embedding_norm(t_embedding_B_T_D)
 
         # for logging purpose

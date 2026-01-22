@@ -60,6 +60,11 @@ COSMOS_V1_2B_MULTIVIEW_NET.num_heads = 16
 COSMOS_V1_2B_MULTIVIEW_NET.extra_per_block_abs_pos_emb = False
 COSMOS_V1_2B_MULTIVIEW_NET.rope_t_extrapolation_ratio = 1.0
 
+# Action-conditioned multiview net (2B)
+COSMOS_V1_2B_MULTIVIEW_ACTION_NET = copy.deepcopy(COSMOS_V1_2B_MULTIVIEW_NET)
+COSMOS_V1_2B_MULTIVIEW_ACTION_NET.action_dim = 7
+COSMOS_V1_2B_MULTIVIEW_ACTION_NET.num_action_per_chunk = 12
+
 COSMOS_V1_14B_MULTIVIEW_NET = copy.deepcopy(COSMOS_V1_7B_MULTIVIEW_NET)
 COSMOS_V1_14B_MULTIVIEW_NET.model_channels = 5120
 COSMOS_V1_14B_MULTIVIEW_NET.num_blocks = 36
@@ -144,6 +149,12 @@ def register_net():
     cs = ConfigStore.instance()
     cs.store(group="net", package="model.config.net", name="mini_net", node=mini_net)
     cs.store(group="net", package="model.config.net", name="cosmos_v1_2B_multiview", node=COSMOS_V1_2B_MULTIVIEW_NET)
+    cs.store(
+        group="net",
+        package="model.config.net",
+        name="cosmos_v1_2B_multiview_action",
+        node=COSMOS_V1_2B_MULTIVIEW_ACTION_NET,
+    )
     cs.store(group="net", package="model.config.net", name="cosmos_v1_7B_multiview", node=COSMOS_V1_7B_MULTIVIEW_NET)
     cs.store(group="net", package="model.config.net", name="cosmos_v1_14B_multiview", node=COSMOS_V1_14B_MULTIVIEW_NET)
     cs.store(

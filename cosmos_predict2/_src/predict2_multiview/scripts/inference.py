@@ -26,6 +26,7 @@ PYTHONPATH=. torchrun --nproc_per_node=8 --master_port=12341 -m cosmos_predict2.
 import argparse
 import os
 
+import torch
 import torch as th
 from einops import rearrange
 from megatron.core import parallel_state
@@ -205,6 +206,140 @@ class Vid2VidInference:
         else:
             raise ValueError(f"Invalid stack mode '{stack_mode}'. Must be one of: {'height', 'width', 'time'}")
         return video
+
+    def generate_autoregressive_from_batch(
+        self,
+        data_batch,
+        num_output_frames: int,
+        chunk_size: int,
+        chunk_overlap: int,
+        guidance: int = 7,
+        seed: int = 1,
+        num_conditional_frames: int = 1,
+        num_steps: int = 35,
+        stack_mode: str = "time",
+        use_negative_prompt: bool = True,
+    ) -> th.Tensor:
+        """Generate multiview video using autoregressive sliding window over time-per-view.
+
+        Returns:
+            Tensor with values in the range [0, 1] and shape (B, C, V*T, H, W) when stack_mode="time".
+        """
+        if chunk_overlap >= chunk_size:
+            raise ValueError("chunk_overlap must be smaller than chunk_size")
+
+        # Model-required frames per view
+        model_required_frames = self.model.tokenizer.get_pixel_num_frames(self.model.config.state_t)
+
+        # Determine number of views
+        sample_n_views = data_batch.get("sample_n_views", None)
+        if isinstance(sample_n_views, th.Tensor):
+            n_views = int(sample_n_views.item())
+        else:
+            n_views = int(sample_n_views) if sample_n_views is not None else 1
+
+        # Initialize full-length input video (B, C, V, T, H, W) on same device as input
+        video_input = data_batch["video"]
+        device = video_input.device
+        B, C, VT, H, W = video_input.shape
+        num_video_frames_per_view = VT // n_views
+        video_input_V = rearrange(video_input, "B C (V T) H W -> B C V T H W", V=n_views)
+
+        full_input_video = th.zeros(
+            B,
+            C,
+            n_views,
+            num_output_frames,
+            H,
+            W,
+            dtype=video_input.dtype,
+            device=device,
+        )
+        if num_conditional_frames > 0:
+            full_input_video[:, :, :, :num_conditional_frames] = video_input_V[:, :, :, :num_conditional_frames]
+
+        # Calculate number of chunks
+        effective_chunk_size = chunk_size - chunk_overlap
+        remaining_after_first = num_output_frames - chunk_size
+        if remaining_after_first <= 0:
+            num_chunks = 1
+        else:
+            num_chunks = 1 + (remaining_after_first + effective_chunk_size - 1) // effective_chunk_size
+
+        log.info(
+            f"Generating {num_chunks} chunks with chunk_size={chunk_size}, chunk_overlap={chunk_overlap} "
+            f"for {num_output_frames} total frames per view"
+        )
+
+        generated_chunks = []
+        current_input_video = full_input_video.clone()
+
+        for chunk_idx in range(num_chunks):
+            start_frame = chunk_idx * effective_chunk_size
+            end_frame = min(start_frame + chunk_size, num_output_frames)
+            actual_chunk_size = end_frame - start_frame
+            if start_frame >= num_output_frames:
+                break
+
+            # Extract chunk input and pad to model_required_frames
+            chunk_input = current_input_video[:, :, :, start_frame:end_frame]  # (B, C, V, T, H, W)
+            if actual_chunk_size < model_required_frames:
+                padding_frames = model_required_frames - actual_chunk_size
+                padding = th.zeros(
+                    B,
+                    C,
+                    n_views,
+                    padding_frames,
+                    H,
+                    W,
+                    dtype=chunk_input.dtype,
+                    device=device,
+                )
+                chunk_input = torch.cat([chunk_input, padding], dim=3)
+
+            chunk_input = rearrange(chunk_input, "B C V T H W -> B C (V T) H W", V=n_views)
+
+            # Determine num_conditional_frames for this chunk
+            chunk_num_conditional = num_conditional_frames if chunk_idx == 0 else chunk_overlap
+
+            # Build chunk batch
+            chunk_batch = dict(data_batch)
+            chunk_batch["video"] = chunk_input
+            chunk_batch["num_video_frames_per_view"] = th.tensor(model_required_frames, dtype=th.int64)
+            chunk_batch["view_indices"] = th.tensor(
+                [i for i in range(n_views) for _ in range(model_required_frames)], dtype=th.int64
+            ).unsqueeze(0)
+            chunk_batch[NUM_CONDITIONAL_FRAMES_KEY] = chunk_num_conditional
+
+            # Generate chunk
+            chunk_video = self.generate_from_batch(
+                chunk_batch,
+                guidance=guidance,
+                seed=seed + chunk_idx,
+                num_steps=num_steps,
+                stack_mode=stack_mode,
+                use_negative_prompt=use_negative_prompt,
+            )
+            chunk_video = chunk_video.to(device)
+            # chunk_video: (B, C, V*T, H, W) in [0,1]
+            chunk_video = rearrange(chunk_video, "B C (V T) H W -> B C V T H W", V=n_views)
+            chunk_video = chunk_video[:, :, :, :actual_chunk_size]
+
+            if chunk_idx == 0:
+                generated_chunks.append(chunk_video)
+            else:
+                generated_chunks.append(chunk_video[:, :, :, chunk_overlap:])
+
+            if chunk_idx < num_chunks - 1:
+                update_start = start_frame + chunk_num_conditional
+                update_end = end_frame
+                current_input_video[:, :, :, update_start:update_end] = chunk_video[:, :, :, chunk_num_conditional:]
+
+        # Concatenate all chunks along time dimension per view
+        final_video = torch.cat(generated_chunks, dim=3)
+        final_video = rearrange(final_video, "B C V T H W -> B C (V T) H W", V=n_views)
+        log.info(f"Generated final video with shape {final_video.shape}")
+        return final_video
 
     def cleanup(self):
         """Clean up distributed resources."""

@@ -408,6 +408,11 @@ class MultiViewCondition(Video2WorldCondition):
         return type(self)(**kwargs)
 
 
+@dataclass(frozen=True)
+class ActionMultiViewCondition(MultiViewCondition):
+    action: Optional[torch.Tensor] = None
+
+
 class MultiViewConditioner(GeneralConditioner):
     def forward(self, batch: Dict, override_dropout_rate: Optional[Dict[str, float]] = None) -> MultiViewCondition:
         output = super()._forward(batch, override_dropout_rate)
@@ -440,6 +445,14 @@ class MultiViewConditioner(GeneralConditioner):
         return condition, un_condition
 
 
+class ActionMultiViewConditioner(MultiViewConditioner):
+    def forward(self, batch: Dict, override_dropout_rate: Optional[Dict[str, float]] = None) -> ActionMultiViewCondition:
+        output = super()._forward(batch, override_dropout_rate)
+        assert "action" in batch, "ActionMultiViewConditioner requires 'action' in batch"
+        output["action"] = batch["action"]
+        return ActionMultiViewCondition(**output)
+
+
 MultiViewConditionerConfig: LazyDict = L(MultiViewConditioner)(
     **_SHARED_CONFIG,
     view_indices_B_T=L(ReMapkey)(
@@ -451,6 +464,28 @@ MultiViewConditionerConfig: LazyDict = L(MultiViewConditioner)(
     ref_cam_view_idx_sample_position=L(ReMapkey)(
         input_key="ref_cam_view_idx_sample_position",
         output_key="ref_cam_view_idx_sample_position",
+        dropout_rate=0.0,
+        dtype=None,
+    ),
+)
+
+ActionMultiViewConditionerConfig: LazyDict = L(ActionMultiViewConditioner)(
+    **_SHARED_CONFIG,
+    view_indices_B_T=L(ReMapkey)(
+        input_key="latent_view_indices_B_T",
+        output_key="view_indices_B_T",
+        dropout_rate=0.0,
+        dtype=None,
+    ),
+    ref_cam_view_idx_sample_position=L(ReMapkey)(
+        input_key="ref_cam_view_idx_sample_position",
+        output_key="ref_cam_view_idx_sample_position",
+        dropout_rate=0.0,
+        dtype=None,
+    ),
+    action=L(ReMapkey)(
+        input_key="action",
+        output_key="action",
         dropout_rate=0.0,
         dtype=None,
     ),
@@ -541,4 +576,10 @@ def register_conditioner():
         package="model.config.conditioner",
         name="video_prediction_multiview_conditioner_per_view_dropout",
         node=MultiViewConditionerPerViewDropoutConfig,
+    )
+    cs.store(
+        group="conditioner",
+        package="model.config.conditioner",
+        name="video_prediction_multiview_action_conditioner",
+        node=ActionMultiViewConditionerConfig,
     )

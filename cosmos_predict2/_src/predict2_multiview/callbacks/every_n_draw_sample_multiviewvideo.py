@@ -157,9 +157,8 @@ class EveryNDrawSampleMultiviewVideo(EveryNDrawSample):
                     "fps": fps,
                     "quality": 5,  # Good quality
                     "macro_block_size": 1,
-                    "ffmpeg_params": ["-c:v", "libx264", "-preset", "medium"],
                 }
-                imageio.mimsave(video_name, processed_frames, "mp4", **kwargs)
+                imageio.mimsave(video_name, processed_frames, **kwargs)
             else:
                 raise ImportError("imageio not available")
         except Exception as e:
@@ -340,14 +339,16 @@ class EveryNDrawSampleMultiviewVideo(EveryNDrawSample):
                         sample_all_img_fp[1], caption=f"{sample_counter}"
                     )
                     info[f"{self.name}/{tag}_sample_allviews"] = wandb.Video(
-                        sample_all_img_fp[2], caption=f"{sample_counter}"
+                        sample_all_img_fp[2], caption=f"{sample_counter}", format="mp4"
                     )
 
                 # info[f"{self.name}/{tag}_sample"] = wandb.Image(sample_n_img_fp[0], caption=f"{sample_counter}")
                 info[f"{self.name}/{tag}_sample_nviews_frames"] = wandb.Image(
                     sample_n_img_fp[1], caption=f"{sample_counter}"
                 )
-                info[f"{self.name}/{tag}_sample_nviews"] = wandb.Video(sample_n_img_fp[2], caption=f"{sample_counter}")
+                info[f"{self.name}/{tag}_sample_nviews"] = wandb.Video(
+                    sample_n_img_fp[2], caption=f"{sample_counter}", format="mp4"
+                )
             wandb.log(
                 info,
                 step=iteration,
@@ -360,7 +361,11 @@ class EveryNDrawSampleMultiviewVideo(EveryNDrawSample):
         Args:
             skip_save: to make sure FSDP can work, we run forward pass on all ranks even though we only save on rank 0 and 1
         """
-        n_views = len(data_batch["view_indices_selection"][0])
+        sample_n_views = data_batch.get("sample_n_views")
+        if isinstance(sample_n_views, torch.Tensor):
+            n_views = int(sample_n_views[0].item()) if sample_n_views.ndim > 0 else int(sample_n_views.item())
+        else:
+            n_views = int(sample_n_views) if sample_n_views is not None else len(data_batch["view_indices_selection"][0])
         if self.fix_batch is not None:
             data_batch = misc.to(self.fix_batch, **model.tensor_kwargs)
         tag = "ema" if self.is_ema else "reg"
@@ -381,7 +386,7 @@ class EveryNDrawSampleMultiviewVideo(EveryNDrawSample):
             )
             data_batch["neg_t5_text_mask"] = data_batch["t5_text_mask"]
 
-        def time_to_width_dimension(mv_video):
+        def time_to_width_dimension(mv_video, expected_view_index_order=None):
             """
             Args:
                 mv_video: (B, C, V * T, H, W)
@@ -389,26 +394,25 @@ class EveryNDrawSampleMultiviewVideo(EveryNDrawSample):
                 (B, C, T, H, V * W)
             """
             current_view_index_order = [i.item() for i in data_batch["view_indices_selection"][0]]
-            expected_view_index_order = visualization_view_index_order
 
-            # Reorder views to match expected visualization order
-            if current_view_index_order != expected_view_index_order:
-                # Create mapping from current order to expected order
-                reorder_indices = []
-                for expected_view in expected_view_index_order:
-                    if expected_view in current_view_index_order:
-                        reorder_indices.append(current_view_index_order.index(expected_view))
+            if expected_view_index_order is not None:
+                # Reorder views to match expected visualization order
+                if (
+                    len(expected_view_index_order) == len(current_view_index_order)
+                    and set(expected_view_index_order) == set(current_view_index_order)
+                    and current_view_index_order != expected_view_index_order
+                ):
+                    # Create mapping from current order to expected order
+                    reorder_indices = [current_view_index_order.index(view) for view in expected_view_index_order]
 
-                # Reshape to separate view and time dimensions
-                B, C, VT, H, W = mv_video.shape
-                T = VT // n_views
-                mv_video = rearrange(mv_video, "B C (V T) H W -> B C V T H W", V=n_views)
+                    # Reshape to separate view and time dimensions
+                    mv_video = rearrange(mv_video, "B C (V T) H W -> B C V T H W", V=n_views)
 
-                # Reorder views according to expected order
-                mv_video = mv_video[:, :, reorder_indices, :, :, :]
+                    # Reorder views according to expected order
+                    mv_video = mv_video[:, :, reorder_indices, :, :, :]
 
-                # Reshape back to original format
-                mv_video = rearrange(mv_video, "B C V T H W -> B C (V T) H W")
+                    # Reshape back to original format
+                    mv_video = rearrange(mv_video, "B C V T H W -> B C (V T) H W", V=n_views)
 
             return rearrange(mv_video, "B C (V T) H W -> B C T H (V W)", V=n_views)
 
@@ -471,8 +475,11 @@ class EveryNDrawSampleMultiviewVideo(EveryNDrawSample):
                         log.info(f"hint: {hint.shape}")
                         to_show.append(hint.float().cpu())
 
-        if n_views == 7:
-            to_show = [time_to_width_dimension(t) for t in to_show]
+        if n_views > 1:
+            expected_view_index_order = (
+                visualization_view_index_order if n_views == len(visualization_view_index_order) else None
+            )
+            to_show = [time_to_width_dimension(t, expected_view_index_order) for t in to_show]
 
         base_fp_wo_ext = f"{tag}_ReplicateID{self.data_parallel_id:04d}_Sample_Iter{iteration:09d}_{n_views}views"
         batch_size = x0.shape[0]

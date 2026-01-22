@@ -36,6 +36,7 @@ from cosmos_predict2._src.predict2.networks.minimal_v4_dit import (
     SACConfig,
 )
 from cosmos_predict2._src.predict2_multiview.networks.multiview_dit import (
+    Mlp,
     MultiCameraSinCosPosEmbAxis,
     MultiCameraVideoRopePosition3DEmb,
 )
@@ -511,6 +512,8 @@ class MultiViewCrossDiT(MinimalV1LVGDiT):
         view_condition_dim: int,
         concat_view_embedding: bool,
         adaln_view_embedding: bool,
+        action_dim: Optional[int] = None,
+        num_action_per_chunk: int = 0,
         layer_mask: Optional[List[bool]] = None,
         sac_config: MultiViewSACConfig = MultiViewSACConfig(),
         enable_cross_view_attn: bool = False,
@@ -576,6 +579,27 @@ class MultiViewCrossDiT(MinimalV1LVGDiT):
 
         if self.concat_view_embedding:
             self.view_embeddings = nn.Embedding(self.n_cameras_emb, view_condition_dim)
+
+        self.use_action_conditioning = action_dim is not None
+        self.action_dim = action_dim
+        self.num_action_per_chunk = num_action_per_chunk
+        if self.use_action_conditioning:
+            if self.num_action_per_chunk <= 0:
+                raise ValueError("num_action_per_chunk must be > 0 when action_dim is set")
+            self.action_embedder_B_D = Mlp(
+                in_features=self.action_dim * self.num_action_per_chunk,
+                hidden_features=self.model_channels * 4,
+                out_features=self.model_channels,
+                act_layer=lambda: nn.GELU(approximate="tanh"),
+                drop=0,
+            )
+            self.action_embedder_B_3D = Mlp(
+                in_features=self.action_dim * self.num_action_per_chunk,
+                hidden_features=self.model_channels * 4,
+                out_features=self.model_channels * 3,
+                act_layer=lambda: nn.GELU(approximate="tanh"),
+                drop=0,
+            )
 
         if self.adaln_view_embedding:
             self.adaln_view_embedder = nn.Embedding(self.n_cameras_emb, self.model_channels)
@@ -796,6 +820,7 @@ class MultiViewCrossDiT(MinimalV1LVGDiT):
         padding_mask: Optional[torch.Tensor] = None,
         data_type: Optional[DataType] = DataType.VIDEO,
         view_indices_B_T: Optional[torch.Tensor] = None,
+        action: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> torch.Tensor | List[torch.Tensor] | Tuple[torch.Tensor, List[torch.Tensor]]:
         # Deletes elements like condition.use_video_condition that are not used in the forward pass
@@ -825,6 +850,13 @@ class MultiViewCrossDiT(MinimalV1LVGDiT):
             if timesteps_B_T.ndim == 1:
                 timesteps_B_T = timesteps_B_T.unsqueeze(1)
             t_embedding_B_T_D, adaln_lora_B_T_3D = self.t_embedder(timesteps_B_T)
+            if self.use_action_conditioning:
+                assert action is not None, "action must be provided for action-conditioned multiview"
+                action = rearrange(action, "b t d -> b 1 (t d)")
+                action_emb_B_D = self.action_embedder_B_D(action)
+                action_emb_B_3D = self.action_embedder_B_3D(action)
+                t_embedding_B_T_D = t_embedding_B_T_D + action_emb_B_D
+                adaln_lora_B_T_3D = adaln_lora_B_T_3D + action_emb_B_3D
             t_embedding_B_T_D = self.t_embedding_norm(t_embedding_B_T_D)
 
         if self.adaln_view_embedding:
