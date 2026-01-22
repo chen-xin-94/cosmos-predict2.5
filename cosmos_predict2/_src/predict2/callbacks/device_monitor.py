@@ -126,7 +126,20 @@ class DeviceMonitor(EveryN):
         iteration: int,
     ) -> None:
         cur_process = psutil.Process(os.getpid())
-        cpu_memory_usage = sum(p.memory_info().rss for p in [cur_process] + cur_process.children(recursive=True))
+        processes = [cur_process]
+        try:
+            processes.extend(cur_process.children(recursive=True))
+        except psutil.Error as e:
+            log.warning(f"Failed to list child processes for device monitor: {e}")
+
+        cpu_memory_usage = 0
+        for proc in processes:
+            try:
+                cpu_memory_usage += proc.memory_info().rss
+            except psutil.NoSuchProcess:
+                continue
+            except psutil.Error as e:
+                log.warning(f"Failed to read memory info for pid={proc.pid}: {e}")
         cpu_mem_gb = cpu_memory_usage / (1024**3)
 
         peak_gpu_mem_gb = torch.cuda.max_memory_allocated() / (1024**3)
