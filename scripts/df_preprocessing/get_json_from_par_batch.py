@@ -44,17 +44,9 @@ with open(meta_path, "r") as f:
         idx = d["episode_index"]
         task_raw = d["tasks"][0]
 
-        if ":" in task_raw:
-            task_root, text = task_raw.split(":", 1)
-            task_root = task_root.strip()
-            text = text.strip()
-        else:
-            task_root = task_raw.strip()
-            text = ""
-
+        # Simplified: everything in tasks[0] goes to "text" as per user request.
         episode_meta[idx] = {
-            "task": task_root,
-            "text": text,
+            "text": task_raw.strip(),
         }
 
 
@@ -87,13 +79,9 @@ def process_single_parquet(parquet_path, save_path, episode_index, chunk_name):
             print(f"[WARNING] Missing video file: {video_abs_path}")
         videos_list.append({"video_path": video_abs_path})
 
-    # Episode metadata
-    meta = episode_meta.get(episode_index, {"task": "", "text": ""})
-
     # Build JSON dict in your required order
     output = {
-        "task": meta["task"],
-        "text": meta["text"],
+        "text": episode_meta.get(episode_index, {"text": ""})["text"],
         "videos": videos_list,
         "state": [],
         "continuous_gripper_state": [],
