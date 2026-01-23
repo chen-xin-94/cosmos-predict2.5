@@ -412,15 +412,15 @@ class Dataset_3D(Dataset):
             # Just add these to fit the interface
             if self.load_t5_embeddings:
                 t5_embeddings = np.squeeze(np.load(ann_file.replace(".json", ".npy")))
-                data["t5_text_embeddings"] = torch.from_numpy(t5_embeddings).cuda()
+                data["t5_text_embeddings"] = torch.from_numpy(t5_embeddings)
             else:
-                data["t5_text_embeddings"] = torch.zeros(512, 1024, dtype=torch.bfloat16).cuda()
+                data["t5_text_embeddings"] = torch.zeros(512, 1024, dtype=torch.bfloat16)
                 data["ai_caption"] = ""
-            data["t5_text_mask"] = torch.ones(512, dtype=torch.int64).cuda()
+            data["t5_text_mask"] = torch.ones(512, dtype=torch.int64)
             data["fps"] = 4
-            data["image_size"] = 256 * torch.ones(4).cuda()
+            data["image_size"] = 256 * torch.ones(4)
             data["num_frames"] = self.sequence_length
-            data["padding_mask"] = torch.zeros(1, 256, 256).cuda()
+            data["padding_mask"] = torch.zeros(1, 256, 256)
 
             return data
         except Exception:
@@ -699,15 +699,15 @@ class Dataset_3D_df(Dataset_3D):
             # Just add these to fit the interface
             if self.load_t5_embeddings:
                 t5_embeddings = np.squeeze(np.load(ann_file.replace(".json", ".npy")))
-                data["t5_text_embeddings"] = torch.from_numpy(t5_embeddings).cuda()
+                data["t5_text_embeddings"] = torch.from_numpy(t5_embeddings)
             else:
-                data["t5_text_embeddings"] = torch.zeros(512, 1024, dtype=torch.bfloat16).cuda()
+                data["t5_text_embeddings"] = torch.zeros(512, 1024, dtype=torch.bfloat16)
                 data["ai_caption"] = ""
-            data["t5_text_mask"] = torch.ones(512, dtype=torch.int64).cuda()
+            data["t5_text_mask"] = torch.ones(512, dtype=torch.int64)
             data["fps"] = 4
-            data["image_size"] = 256 * torch.ones(4).cuda()
+            data["image_size"] = 256 * torch.ones(4)
             data["num_frames"] = self.sequence_length
-            data["padding_mask"] = torch.zeros(1, 256, 256).cuda()
+            data["padding_mask"] = torch.zeros(1, 256, 256)
             return data
         except Exception:
             warnings.warn(

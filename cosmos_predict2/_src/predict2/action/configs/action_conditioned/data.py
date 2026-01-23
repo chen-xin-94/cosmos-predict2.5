@@ -255,12 +255,16 @@ avla_franka_multiview_13frame_448_1344_train_dataloader = L(DataLoader)(
     sampler=L(get_sampler)(dataset=avla_franka_multiview_13frame_448_1344_train_dataset),
     batch_size=1,
     drop_last=True,
+    num_workers=4,
+    pin_memory=True,
 )
 avla_franka_multiview_13frame_448_1344_val_dataloader = L(DataLoader)(
     dataset=avla_franka_multiview_13frame_448_1344_val_dataset,
     sampler=L(get_sampler)(dataset=avla_franka_multiview_13frame_448_1344_val_dataset),
     batch_size=1,
     drop_last=True,
+    num_workers=4,
+    pin_memory=True,
 )
 ################################################
 
