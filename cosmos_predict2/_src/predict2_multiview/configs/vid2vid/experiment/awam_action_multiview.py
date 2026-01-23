@@ -3,6 +3,8 @@
 #
 # Action-conditioned multiview experiments (AWAM).
 
+from datetime import datetime
+
 from hydra.core.config_store import ConfigStore
 
 from cosmos_predict2._src.imaginaire.lazy_config import LazyCall as L
@@ -30,8 +32,9 @@ def awam_action_multiview_2b_3views_448() -> dict:
         ],
         job=dict(
             group="awam",
-            name="awam_action_multiview_2b_3views_448",
+            name=f"awam_action_multiview_2b_3views_448_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
             wandb_mode="online",
+            # wandb_mode="disabled",
         ),
         optimizer=dict(
             lr=3e-5,
@@ -41,22 +44,22 @@ def awam_action_multiview_2b_3views_448() -> dict:
         checkpoint=dict(
             load_from_object_store=dict(enabled=False),
             save_to_object_store=dict(enabled=False),
-            save_iter=1_000,
+            save_iter=5_000,
         ),
         trainer=dict(
-            max_iter=10_000,
+            max_iter=150_000,
             logging_iter=10,
             straggler_detection=dict(enabled=False),
             callbacks=dict(
                 every_n_sample_reg=L(EveryNDrawSampleMultiviewVideo)(
-                    every_n=1_000,
+                    every_n=5_000,
                     do_x0_prediction=False,
                     guidance=[0, 3, 7],
                     fps=16,
                     save_s3=False,
                 ),
                 every_n_sample_ema=L(EveryNDrawSampleMultiviewVideo)(
-                    every_n=1_000,
+                    every_n=5_000,
                     do_x0_prediction=False,
                     is_ema=True,
                     guidance=[0, 3, 7],
@@ -151,10 +154,17 @@ experiments = [
 
 cs = ConfigStore.instance()
 
+# Map of experiment configs to their static registration names
+experiment_names = {
+    id(experiments[0]): "awam_action_multiview_2b_3views_448",
+}
+
 for _item in experiments:
+    # Use static name for registration, but job name will have timestamp at runtime
+    static_name = experiment_names.get(id(_item), _item["job"]["name"])
     cs.store(
         group="experiment",
         package="_global_",
-        name=_item["job"]["name"],
+        name=static_name,
         node=_item,
     )

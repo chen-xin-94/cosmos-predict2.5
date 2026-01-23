@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from datetime import datetime
+
 from hydra.core.config_store import ConfigStore
 
 from cosmos_predict2._src.imaginaire.lazy_config import LazyDict
@@ -41,8 +43,6 @@ ac_reason_embeddings_rectified_flow_2b_256_320 = LazyDict(
             project="cosmos_predict2_action_conditioned",
             group="cosmos_predict_v2p5",
             name="2b_bridge_action_conditioned",
-            # wandb_mode="online",
-            wandb_mode="disabled",
         ),
         optimizer=dict(
             lr=2 ** (-14.5),  # 2**(-14.5) = 3.0517578125e-05
@@ -183,14 +183,16 @@ ac_reason_embeddings_rectified_flow_2b_multiview_448_1344 = LazyDict(
         job=dict(
             project="cosmos_predict2_action_conditioned",
             group="cosmos_predict_v2p5",
-            name="2b_avla_multiview_action_conditioned_448",
+            name=f"2b_avla_multiview_action_conditioned_448_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            wandb_mode="online",
+            # wandb_mode="disabled",
         ),
         optimizer=dict(
             lr=2 ** (-14.5),
             weight_decay=0.1,
         ),
         checkpoint=dict(
-            save_iter=1_000,
+            save_iter=2_000,
             load_path=get_checkpoint_path(DEFAULT_CHECKPOINT.s3.uri),
             load_training_state=False,
             strict_resume=False,
@@ -198,7 +200,7 @@ ac_reason_embeddings_rectified_flow_2b_multiview_448_1344 = LazyDict(
             save_to_object_store=dict(enabled=False),
         ),
         trainer=dict(
-            max_iter=10_000,
+            max_iter=50_000,
             logging_iter=10,
             straggler_detection=dict(enabled=False),
             callbacks=dict(
@@ -233,10 +235,15 @@ ac_reason_embeddings_rectified_flow_2b_multiview_448_1344 = LazyDict(
 )
 
 
+
 cs = ConfigStore.instance()
 
-for _item in [ac_reason_embeddings_rectified_flow_2b_256_320_df, ac_reason_embeddings_rectified_flow_2b_multiview_448_1344]:
-    # Get the experiment name from the global variable
-    experiment_name = [name.lower() for name, value in globals().items() if value is _item][0]  # noqa: RUF015
+# Map of experiment configs to their static registration names (used by Hydra)
+# The actual job.name will have timestamps, but Hydra needs static names
+experiments = {
+    ac_reason_embeddings_rectified_flow_2b_256_320_df: "ac_reason_embeddings_rectified_flow_2b_256_320_df",
+    ac_reason_embeddings_rectified_flow_2b_multiview_448_1344: "ac_reason_embeddings_rectified_flow_2b_multiview_448_1344",
+}
 
-    cs.store(group="experiment", package="_global_", name=f"{experiment_name}", node=_item)
+for config, static_name in experiments.items():
+    cs.store(group="experiment", package="_global_", name=static_name, node=config)
