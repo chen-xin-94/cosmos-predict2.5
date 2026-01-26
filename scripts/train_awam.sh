@@ -3,9 +3,6 @@
 # Set output directory for checkpoints
 export IMAGINAIRE_OUTPUT_ROOT=/raid/chen.xin/repo/cosmos-predict2.5/imaginaire-output
 
-# remove previous run
-# rm -r $IMAGINAIRE_OUTPUT_ROOT/cosmos_predict2_multiview/awam/awam_action_multiview_2b_3views_448
-
 # Set visible GPU(s)
 export CUDA_VISIBLE_DEVICES=5,7
 

@@ -213,3 +213,7 @@ cython_debug/
 /*.zip
 
 cosmos_predict2/datasets
+
+.tasks.local
+AGENT.md
+CLAUDE.md
