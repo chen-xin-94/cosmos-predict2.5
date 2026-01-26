@@ -68,7 +68,41 @@ state_t = 1 + 12 // 4  # = 4 latent frames
 | Mode | Raw Frames | Latent (`state_t`) |
 |------|------------|-------------------|
 | Training | 13 | 4 |
-| Inference | Variable (chunked) | Variable |
+| Inference | 13 per chunk (autoregressive) | 4 per chunk |
+
+#### Frame-Action Relationship
+
+The core relationship for action-conditioned models:
+
+```
+num_generated_frames = num_action_per_chunk + 1
+```
+
+| Parameter | Value | Meaning |
+|-----------|-------|---------|
+| `num_action_per_chunk` | 12 | Actions per chunk (training & inference) |
+| `sequence_length` | 13 | Total frames = actions + 1 initial frame |
+| `state_t` | 4 | Latent temporal dim = 1 + (13-1)//4 |
+| `chunk_size` (inference) | 12 | Must match `num_action_per_chunk` |
+
+#### `fps_downsample_ratio` Explained
+
+Controls the **sampling stride** for both video frames and action states, keeping them synchronized:
+
+```python
+# Training: Dataset_3D_df
+curr_frame_i += self.fps_downsample_ratio  # e.g., frames 0, 6, 12, 18...
+
+# Inference: action_conditioned.py
+arm_states[::fps_downsample_ratio]  # Take every Nth state
+```
+
+**Example**: Source video at 30 FPS with `fps_downsample_ratio=6`:
+- **Effective FPS**: 30 / 6 = 5 FPS
+- **Frame selection**: frames 0, 6, 12, 18, ... (every 6th)
+- **Action computation**: states 0, 6, 12, 18, ... (synchronized)
+
+> **Critical**: Training and inference must use the **same** `fps_downsample_ratio`, otherwise temporal dynamics won't match what the model learned.
 
 ### 2.4 Multi-view Implementation
 
