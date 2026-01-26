@@ -183,6 +183,84 @@ def load_default_action_fn():
     return load_fn
 
 
+def load_multiview_action_fn():
+    """
+    Multi-view action loading function that loads all camera views and concatenates them.
+    
+    This function mirrors the training behavior of ActionConditionedMultiViewDataset_df._get_obs()
+    which loads frames from all camera IDs and concatenates them along the width dimension.
+    """
+
+    def load_fn(
+        json_data: dict,
+        video_path: str,
+        args: ActionConditionedInferenceArguments,
+    ) -> dict:
+        """
+        Load action data and multi-view frames from JSON and prepare for inference.
+
+        Args:
+            json_data: JSON data containing robot states and multi-view video paths
+            video_path: Not used directly; we read all videos from json_data["videos"]
+            args: Inference arguments (resolution should be "448,1344" for 3 views)
+
+        Returns:
+            Dictionary containing actions, concatenated initial frame, and metadata
+        """
+        # Get action sequence from states (same as single-view)
+        actions = get_action_sequence_from_states(
+            json_data,
+            fps_downsample_ratio=args.fps_downsample_ratio,
+            state_key=args.state_key,
+            gripper_scale=args.gripper_scale,
+            gripper_key=args.gripper_key,
+            action_scaler=args.action_scaler,
+            use_quat=args.use_quat,
+        )
+
+        # Parse resolution to get per-view dimensions
+        # For 448x1344 with 3 views: per_view_h=448, per_view_w=448
+        if args.resolution != "none":
+            h, w = map(int, args.resolution.split(","))
+            num_views = len(json_data["videos"])
+            per_view_h = h
+            per_view_w = w // num_views
+        else:
+            per_view_h, per_view_w = 448, 448
+            num_views = len(json_data["videos"])
+
+        # Load and process each camera view
+        frames_list = []
+        input_root = args.input_root
+        
+        for cam_idx in range(num_views):
+            video_info = json_data["videos"][cam_idx]
+            if isinstance(video_info, dict):
+                cam_video_path = str(input_root / video_info["video_path"]) if not video_info["video_path"].startswith("/") else video_info["video_path"]
+            else:
+                cam_video_path = str(input_root / video_info) if not video_info.startswith("/") else video_info
+
+            # Load video and extract initial frame
+            video_array = mediapy.read_video(cam_video_path)
+            img_array = video_array[args.start_frame_idx]
+            
+            # Resize to per-view resolution
+            img_array = mediapy.resize_image(img_array, (per_view_h, per_view_w))
+            frames_list.append(img_array)
+
+        # Concatenate all views along width (axis=1 for H,W,C format)
+        combined_frame = np.concatenate(frames_list, axis=1)
+
+        return {
+            "actions": actions,
+            "initial_frame": combined_frame,
+            "video_array": None,  # Not used for multi-view
+            "video_path": video_path,
+        }
+
+    return load_fn
+
+
 def load_callable(name: str):
     """Load a callable function from a module path string."""
     from importlib import import_module
