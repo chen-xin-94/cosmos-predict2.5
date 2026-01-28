@@ -1,9 +1,25 @@
+import argparse
 import os
 import random
 import shutil
 
+parser = argparse.ArgumentParser(description="Split processed JSONs into train/val/test.")
+parser.add_argument(
+    "--processed-dir",
+    type=str,
+    default="datasets/df/avla_nov_8_merged_per_embodiment_2025-11-12/fr3_single_arm_franka_hand/annotation/processed_json",
+    help="Path to the directory containing processed JSON files.",
+)
+parser.add_argument(
+    "--seed",
+    type=int,
+    default=28,
+    help="Random seed for shuffling files.",
+)
+args = parser.parse_args()
+
 # processed_json directory
-processed_dir = "/raid/yusong.li/workspace/cosmos-predict2.5_df/cosmos_predict2/datasets/df/avla_nov_8_merged_per_embodiment_2025-11-12/fr3_single_arm_franka_hand/annotation/processed_json"
+processed_dir = args.processed_dir
 
 # Parent directory (annotation/)
 parent_dir = os.path.dirname(processed_dir)
@@ -24,7 +40,7 @@ total = len(all_files)
 print(f"Found {total} JSON files in processed_json/.")
 
 # Set random seed for reproducibility
-random.seed(28)
+random.seed(args.seed)
 
 # Shuffle files
 random.shuffle(all_files)
