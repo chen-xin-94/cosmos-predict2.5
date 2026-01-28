@@ -6,6 +6,21 @@ import pandas as pd
 
 # TODO: multiprocessing for speedup
 
+# === Configurations ===
+CONFIGS = {
+    "data_foundry": {
+        "camera_views": [
+            "observation.images.frame_camera_left",
+            "observation.images.frame_camera_top",
+            "observation.images.wrist_camera",
+        ],
+        "state_key": "observation.state.franka_robot_ee",
+        "gripper_key": "observation.state.franka_robot_gripper",
+        "action_key": "action",
+        "append_last_action_to_state": True,
+    }
+}
+
 # === Base Paths ===
 parser = argparse.ArgumentParser(description="Convert parquet episodes to JSON annotations.")
 parser.add_argument(
@@ -13,7 +28,18 @@ parser.add_argument(
     default="avla_nov_8_merged_per_embodiment_2025-11-12/fr3_single_arm_franka_hand",
     help="Dataset subdirectory under the data_foundry root.",
 )
+parser.add_argument(
+    "--config-name",
+    default="data_foundry",
+    choices=CONFIGS.keys(),
+    help="Name of the configuration to use for dataset keys.",
+)
 args = parser.parse_args()
+
+# Load selected config
+if args.config_name not in CONFIGS:
+    raise ValueError(f"Config '{args.config_name}' not found. Available configs: {list(CONFIGS.keys())}")
+current_config = CONFIGS[args.config_name]
 
 data_root = os.path.join(
     "/mnt/central_storage/data_pool/data_foundry",
@@ -37,17 +63,20 @@ meta_path = os.path.join(data_root, "meta/episodes.jsonl")
 # ------------------------------------------------------------
 episode_meta = {}
 
-with open(meta_path, "r") as f:
-    for line in f:
-        d = json.loads(line)
+if os.path.exists(meta_path):
+    with open(meta_path, "r") as f:
+        for line in f:
+            d = json.loads(line)
 
-        idx = d["episode_index"]
-        task_raw = d["tasks"][0]
+            idx = d["episode_index"]
+            task_raw = d["tasks"][0]
 
-        # Simplified: everything in tasks[0] goes to "text" as per user request.
-        episode_meta[idx] = {
-            "text": task_raw.strip(),
-        }
+            # Simplified: everything in tasks[0] goes to "text" as per user request.
+            episode_meta[idx] = {
+                "text": task_raw.strip(),
+            }
+else:
+    print(f"[WARNING] Meta file not found at {meta_path}. Text fields will be empty.")
 
 
 # ------------------------------------------------------------
@@ -59,16 +88,15 @@ def process_single_parquet(parquet_path, save_path, episode_index, chunk_name):
     # Keep ALL frames (no downsampling)
     df_filtered = df.reset_index(drop=True)
 
-    # Define camera view folder names
-    camera_views = [
-        "observation.images.frame_camera_left",
-        "observation.images.frame_camera_top",
-        "observation.images.wrist_camera",
-    ]
+    # Use configured camera views
+    camera_views = current_config["camera_views"]
 
     # Build videos list with all camera views
     videos_list = []
     for cam_view in camera_views:
+        # Construct video path
+        # Note: Lerobot typically structures videos as videos/chunk/camera_key/episode_id.mp4
+        # We assume this structure holds for all supported datasets.
         video_abs_path = os.path.join(
             root_video_dir,
             chunk_name,
@@ -88,17 +116,41 @@ def process_single_parquet(parquet_path, save_path, episode_index, chunk_name):
         "episode_index": episode_index,
     }
 
+    # Get keys from config
+    state_key = current_config["state_key"]
+    gripper_key = current_config["gripper_key"]
+    action_key = current_config.get("action_key", "action")
+    append_last_action_to_state = current_config.get("append_last_action_to_state", False)
+
     # Fill state + gripper lists using ALL rows
     for _, row in df_filtered.iterrows():
         # 7D EE state
-        ee = [float(x) for x in row["observation.state.franka_robot_ee"]]
+        if state_key in row:
+            ee = [float(x) for x in row[state_key]]
+        else:
+             # Fallback or error if key missing? For now assumes it must exist or error out
+            raise KeyError(f"State key '{state_key}' not found in parquet columns: {row.index.tolist()}")
 
         # Add last action dim
-        action_last = float(row["action"][-1])
-        output["state"].append(ee + [action_last])
+        extra_dims = []
+        if append_last_action_to_state:
+            # For the default Bridge dataset and data foundry dataset, _get_actions actually use state to calculate action instead of loading action from json,
+            # so have to add last dim of action to show gripper value which is not present in state values in some dataset e.g. df.
+            if action_key in row:
+                action_last = float(row[action_key][-1])
+                extra_dims.append(action_last)
+            else:
+                extra_dims.append(0.0) # Placeholder value
+                print(f"[WARNING] '{action_key}' column missing in {parquet_path}")
+
+        output["state"].append(ee + extra_dims)
 
         # Gripper scalar
-        grip = float(row["observation.state.franka_robot_gripper"])
+        if gripper_key in row:
+            grip = float(row[gripper_key])
+        else:
+             raise KeyError(f"Gripper key '{gripper_key}' not found in parquet columns")
+        
         output["continuous_gripper_state"].append(grip)
 
     # Add timesteps = number of rows
