@@ -135,7 +135,8 @@ def process_single_parquet(parquet_path, save_path, episode_index, chunk_name):
         extra_dims = []
         if append_last_action_to_state:
             # For the default Bridge dataset and data foundry dataset, _get_actions actually use state to calculate action instead of loading action from json,
-            # so have to add last dim of action to show gripper value which is not present in state values in some dataset e.g. df.
+            # so we add last dim of action here to show gripper value which is not present in state values in some dataset e.g. data foundry.
+            # However, in _get_robot_states, arm_states = states[:, :6] for bridge dataset, so it actually doesn't matter if we add the last action dim here or not. 
             if action_key in row:
                 action_last = float(row[action_key][-1])
                 extra_dims.append(action_last)
