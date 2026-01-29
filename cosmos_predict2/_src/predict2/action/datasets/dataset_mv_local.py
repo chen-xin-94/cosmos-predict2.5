@@ -27,7 +27,7 @@ import time
 
 import torch
 
-from cosmos_predict2._src.predict2.action.datasets.dataset_local import Dataset_3D, Dataset_3D_DF
+from cosmos_predict2._src.predict2.action.datasets.dataset_local import Dataset_3D
 
 
 class ActionConditionedMultiViewDataset(Dataset_3D):
@@ -73,55 +73,6 @@ class ActionConditionedMultiViewDataset(Dataset_3D):
                 if len(sample["frame_ids"]) == self.sequence_length:
                     samples.append(sample)
         return samples
-
-
-class ActionConditionedMultiViewDataset_DF(Dataset_3D_DF):
-    """Multi-view variant of Dataset_3D_DF supporting 3+ camera views.
-    
-    This class extends Dataset_3D_DF to concatenate multiple camera views
-    along the width dimension. Unlike ActionConditionedMultiViewDataset which
-    is limited to 2 views with a specific selection pattern, this class
-    supports an arbitrary number of views specified in cam_ids.
-    
-    Args:
-        cam_ids: List of integer indices corresponding to entries in the
-            JSON "videos" list. Example: [0, 1, 2] for all 3 views.
-    
-    Example usage:
-        dataset = ActionConditionedMultiViewDataset_DF(
-            ...,
-            cam_ids=[0, 1, 2],  # All 3 views concatenated
-            ...
-        )
-    """
-
-    def _get_obs(self, label, frame_ids, cam_id, pre_encode):
-        """Override to load and concatenate multiple camera views.
-        
-        Args:
-            label: JSON annotation dict containing "videos" list
-            frame_ids: List of frame indices to load
-            cam_id: Optional override for camera IDs (uses self.cam_ids if None)
-            pre_encode: Whether to use pre-encoded features (not supported)
-        
-        Returns:
-            Tuple of (frames, cam_ids_used) where frames has shape (L, C, H, W*num_views)
-        """
-        if cam_id is None:
-            cam_ids_to_use = self.cam_ids
-        else:
-            cam_ids_to_use = cam_id
-        
-        frames_list = []
-        for cid in cam_ids_to_use:
-            frames = self._get_frames(label, frame_ids, cam_id=cid, pre_encode=pre_encode)
-            frames_list.append(frames)
-        
-        # Concatenate all views along width (dim=3 for L,C,H,W format)
-        combined_frames = torch.cat(frames_list, dim=3)
-        return combined_frames, cam_ids_to_use
-
-
 
 
 if __name__ == "__main__":

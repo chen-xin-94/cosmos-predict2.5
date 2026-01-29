@@ -14,8 +14,7 @@ import time
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from cosmos_predict2._src.predict2.action.datasets.dataset_local import Dataset_3D_DF
-from cosmos_predict2._src.predict2.action.datasets.dataset_mv_local import ActionConditionedMultiViewDataset_DF
+from cosmos_predict2._src.predict2.action.datasets.dataset_df import Dataset_3D_DF, ActionConditionedMultiViewDataset_DF
 
 
 def test_datasets():

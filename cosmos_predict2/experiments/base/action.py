@@ -235,6 +235,78 @@ ac_reason_embeddings_rectified_flow_2b_multiview_448_1344 = LazyDict(
 )
 
 
+"""
+AgiBotWorld Multi-view 3-camera action-conditioned training
+Resolution: 480x1920 (3 views of 480x640 concatenated along width)
+Action dimension: 36 (pre-scaled to [0, 1])
+
+torchrun --nproc_per_node=1 --master_port=12341 -m scripts.train --config=cosmos_predict2/_src/predict2/action/configs/action_conditioned/config.py  -- experiment=ac_reason_embeddings_rectified_flow_2b_agibot_480_1920 ~dataloader_train.dataloaders
+"""
+ac_reason_embeddings_rectified_flow_2b_agibot_480_1920 = LazyDict(
+    dict(
+        defaults=[
+            DEFAULT_CHECKPOINT.experiment,  # Use the checkpoint's experiment directly
+            {"override /model": "action_conditioned_video2world_fsdp_rectified_flow"},
+            {"override /net": "cosmos_v1_2B_action_conditioned"},
+            {"override /conditioner": "action_conditioned_video_conditioner"},
+            {"override /data_train": "agibot_multiview_13frame_480_1920_train"},
+            {"override /data_val": "agibot_multiview_13frame_480_1920_val"},
+            "_self_",
+        ],
+        job=dict(
+            project="cosmos_predict2_action_conditioned",
+            group="cosmos_predict_v2p5",
+            name=f"2b_agibot_multiview_action_conditioned_480_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            wandb_mode="online",
+        ),
+        optimizer=dict(
+            lr=2 ** (-14.5),
+            weight_decay=0.1,
+        ),
+        checkpoint=dict(
+            save_iter=2_000,
+            load_path=get_checkpoint_path(DEFAULT_CHECKPOINT.s3.uri),
+            load_training_state=False,
+            strict_resume=False,
+            load_from_object_store=dict(enabled=False),
+            save_to_object_store=dict(enabled=False),
+        ),
+        trainer=dict(
+            max_iter=50_000,
+            logging_iter=10,
+            straggler_detection=dict(enabled=False),
+            callbacks=dict(
+                every_n_sample_reg=dict(every_n=1_000, do_x0_prediction=False, guidance=[0, 3, 7], fps=16, save_s3=False),
+                every_n_sample_ema=dict(every_n=1_000, do_x0_prediction=False, guidance=[0, 3, 7], fps=16, save_s3=False),
+                heart_beat=dict(save_s3=False),
+                iter_speed=dict(hit_thres=5, every_n=1, save_s3=False),
+                device_monitor=dict(save_s3=False),
+                wandb=dict(save_s3=False),
+                wandb_10x=dict(save_s3=False),
+                dataloader_speed=dict(save_s3=False),
+            ),
+        ),
+        model_parallel=dict(context_parallel_size=1),
+        model=dict(
+            config=dict(
+                min_num_conditional_frames=1,
+                max_num_conditional_frames=1,
+                conditional_frames_probs=None,
+                state_t=1 + 12 // 4,
+                net=dict(action_dim=36, num_action_per_chunk=12),  # 36-dim actions for AgiBotWorld
+                conditioner=dict(text=dict(use_prompt=True)),  # Enable text conditioning
+            ),
+        ),
+        dataloader_train=dict(
+            batch_size=2,
+            sampler=dict(dataset=dict(fps_downsample_ratio=6, video_size=[480, 640])),
+            dataset=dict(fps_downsample_ratio=6, video_size=[480, 640]),
+        ),
+    ),
+    flags={"allow_objects": True},
+)
+
+
 
 cs = ConfigStore.instance()
 
@@ -243,7 +315,9 @@ cs = ConfigStore.instance()
 experiments = {
     ac_reason_embeddings_rectified_flow_2b_256_320_df: "ac_reason_embeddings_rectified_flow_2b_256_320_df",
     ac_reason_embeddings_rectified_flow_2b_multiview_448_1344: "ac_reason_embeddings_rectified_flow_2b_multiview_448_1344",
+    ac_reason_embeddings_rectified_flow_2b_agibot_480_1920: "ac_reason_embeddings_rectified_flow_2b_agibot_480_1920",
 }
 
 for config, static_name in experiments.items():
     cs.store(group="experiment", package="_global_", name=static_name, node=config)
+

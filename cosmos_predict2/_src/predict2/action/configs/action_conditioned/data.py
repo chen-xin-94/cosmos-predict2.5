@@ -20,7 +20,12 @@ from megatron.core import parallel_state
 from torch.utils.data import DataLoader, DistributedSampler
 
 from cosmos_predict2._src.imaginaire.lazy_config import LazyCall as L
-from cosmos_predict2._src.predict2.action.datasets.dataset_local import Dataset_3D, Dataset_3D_DF
+from cosmos_predict2._src.predict2.action.datasets.dataset_local import Dataset_3D
+from cosmos_predict2._src.predict2.action.datasets.dataset_df import Dataset_3D_DF
+from cosmos_predict2._src.predict2.action.datasets.dataset_agibot import (
+    Dataset_3D_AGIBOT,
+    ActionConditionedMultiViewDataset_AGIBOT,
+)
 
 try:
     from cosmos_predict2._src.predict2.action.configs.action_conditioned.experiment.gr00t_customized_gr1 import (
@@ -220,7 +225,7 @@ avla_franka_single_arm_13frame_480_640_val_dataloader = L(DataLoader)(
 
 ################### Multi-View AVLA Dataset (3 views, width-concatenated) ###################
 # Import the multi-view dataset class
-from cosmos_predict2._src.predict2.action.datasets.dataset_mv_local import ActionConditionedMultiViewDataset_DF
+from cosmos_predict2._src.predict2.action.datasets.dataset_df import ActionConditionedMultiViewDataset_DF
 
 # Multi-view 3-camera dataset: 448x1344 (3x448 width)
 avla_franka_multiview_13frame_448_1344_train_dataset = L(ActionConditionedMultiViewDataset_DF)(
@@ -261,6 +266,53 @@ avla_franka_multiview_13frame_448_1344_train_dataloader = L(DataLoader)(
 avla_franka_multiview_13frame_448_1344_val_dataloader = L(DataLoader)(
     dataset=avla_franka_multiview_13frame_448_1344_val_dataset,
     sampler=L(get_sampler)(dataset=avla_franka_multiview_13frame_448_1344_val_dataset),
+    batch_size=1,
+    drop_last=True,
+    num_workers=4,
+    pin_memory=True,
+)
+################################################
+
+
+################### AgiBotWorld Multi-View Dataset (3 views, width-concatenated to 480x1920) ###################
+# Base annotation path - will traverse all task subdirectories
+agibot_base_annotation_path = "datasets/agibot/annotation"
+
+# Multi-view 3-camera dataset: 480x1920 (3x640 width)
+agibot_multiview_13frame_480_1920_train_dataset = L(ActionConditionedMultiViewDataset_AGIBOT)(
+    base_annotation_path=agibot_base_annotation_path,
+    video_path="",  # Not used, paths are absolute in JSON
+    fps_downsample_ratio=1,
+    num_action_per_chunk=12,
+    cam_ids=[0, 1, 2],  # All 3 cameras: hand_left, head, hand_right
+    accumulate_action=False,
+    video_size=[480, 640],  # Per-view resolution, concatenated to 480x1920
+    val_start_frame_interval=1,
+    mode="train",
+)
+agibot_multiview_13frame_480_1920_val_dataset = L(ActionConditionedMultiViewDataset_AGIBOT)(
+    base_annotation_path=agibot_base_annotation_path,
+    video_path="",  # Not used, paths are absolute in JSON
+    fps_downsample_ratio=1,
+    num_action_per_chunk=12,
+    cam_ids=[0, 1, 2],  # All 3 cameras: hand_left, head, hand_right
+    accumulate_action=False,
+    video_size=[480, 640],  # Per-view resolution, concatenated to 480x1920
+    val_start_frame_interval=100,
+    mode="val",
+)
+
+agibot_multiview_13frame_480_1920_train_dataloader = L(DataLoader)(
+    dataset=agibot_multiview_13frame_480_1920_train_dataset,
+    sampler=L(get_sampler)(dataset=agibot_multiview_13frame_480_1920_train_dataset),
+    batch_size=1,
+    drop_last=True,
+    num_workers=4,
+    pin_memory=True,
+)
+agibot_multiview_13frame_480_1920_val_dataloader = L(DataLoader)(
+    dataset=agibot_multiview_13frame_480_1920_val_dataset,
+    sampler=L(get_sampler)(dataset=agibot_multiview_13frame_480_1920_val_dataset),
     batch_size=1,
     drop_last=True,
     num_workers=4,
@@ -327,6 +379,20 @@ def register_training_and_val_data():
         package="dataloader_val",
         name="avla_franka_multiview_13frame_448_1344_val",
         node=avla_franka_multiview_13frame_448_1344_val_dataloader,
+    )
+
+    # AgiBotWorld Multi-view 3-camera 13 frame 480x1920
+    cs.store(
+        group="data_train",
+        package="dataloader_train",
+        name="agibot_multiview_13frame_480_1920_train",
+        node=agibot_multiview_13frame_480_1920_train_dataloader,
+    )
+    cs.store(
+        group="data_val",
+        package="dataloader_val",
+        name="agibot_multiview_13frame_480_1920_val",
+        node=agibot_multiview_13frame_480_1920_val_dataloader,
     )
 
     # Register gr00t_customized_gr1 data

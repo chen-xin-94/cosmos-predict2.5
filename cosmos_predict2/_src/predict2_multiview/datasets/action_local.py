@@ -14,7 +14,7 @@ from typing import Sequence
 import numpy as np
 import torch
 
-from cosmos_predict2._src.predict2.action.datasets.dataset_local import Dataset_3D_DF
+from cosmos_predict2._src.predict2.action.datasets.dataset_df import Dataset_3D_DF
 
 
 class ActionMultiViewDatasetDF(Dataset_3D_DF):
