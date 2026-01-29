@@ -1,3 +1,8 @@
+
+"""
+Preprocess Data Foundry dataset to JSON format for Cosmos Predict2.5 training.
+"""
+
 import argparse
 import json
 import os
@@ -51,7 +56,7 @@ root_video_dir = os.path.join(data_root, "videos")
 output_root = os.path.join(
     "/raid/chen.xin/repo/cosmos-predict2.5/datasets/df",
     args.dataset_subdir,
-    "annotation/processed_json",
+    "annotation/all",
 )
 os.makedirs(output_root, exist_ok=True)
 

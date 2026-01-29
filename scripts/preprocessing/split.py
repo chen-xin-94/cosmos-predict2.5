@@ -1,3 +1,7 @@
+"""
+Split processed JSONs into train/val/test.
+"""
+
 import argparse
 import os
 import random
@@ -7,7 +11,7 @@ parser = argparse.ArgumentParser(description="Split processed JSONs into train/v
 parser.add_argument(
     "--processed-dir",
     type=str,
-    default="datasets/df/avla_nov_8_merged_per_embodiment_2025-11-12/fr3_single_arm_franka_hand/annotation/processed_json",
+    default="datasets/df/avla_nov_8_merged_per_embodiment_2025-11-12/fr3_single_arm_franka_hand/annotation/all",
     help="Path to the directory containing processed JSON files.",
 )
 parser.add_argument(
@@ -18,13 +22,10 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-# processed_json directory
 processed_dir = args.processed_dir
-
-# Parent directory (annotation/)
 parent_dir = os.path.dirname(processed_dir)
 
-# Create split directories parallel to processed_json/
+# Create split directories
 train_dir = os.path.join(parent_dir, "train")
 val_dir   = os.path.join(parent_dir, "val")
 test_dir  = os.path.join(parent_dir, "test")
@@ -37,7 +38,7 @@ os.makedirs(test_dir, exist_ok=True)
 all_files = [f for f in os.listdir(processed_dir) if f.endswith(".json")]
 
 total = len(all_files)
-print(f"Found {total} JSON files in processed_json/.")
+print(f"Found {total} JSON files in {processed_dir}.")
 
 # Set random seed for reproducibility
 random.seed(args.seed)
@@ -62,11 +63,11 @@ def move_files(files, target_dir):
     for fname in files:
         src = os.path.join(processed_dir, fname)
         dst = os.path.join(target_dir, fname)
-        shutil.copy(src, dst)  # use copy (safer)
-        # shutil.move(src, dst)  # use move if you want to REMOVE from processed_json
+        # shutil.copy(src, dst)  # use copy (safer)
+        shutil.move(src, dst) 
 
 move_files(train_files, train_dir)
 move_files(val_files, val_dir)
 move_files(test_files, test_dir)
 
-print("Done! train/, val/, test/ created PARALLEL to processed_json/")
+print("Done! train/, val/, test/ created in {parent_dir}")
