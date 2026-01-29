@@ -90,7 +90,7 @@ num_generated_frames = num_action_per_chunk + 1
 Controls the **sampling stride** for both video frames and action states, keeping them synchronized:
 
 ```python
-# Training: Dataset_3D_df
+# Training: Dataset_3D_DF
 curr_frame_i += self.fps_downsample_ratio  # e.g., frames 0, 6, 12, 18...
 
 # Inference: action_conditioned.py

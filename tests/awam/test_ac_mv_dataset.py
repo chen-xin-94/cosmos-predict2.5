@@ -14,8 +14,8 @@ import time
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from cosmos_predict2._src.predict2.action.datasets.dataset_local import Dataset_3D_df
-from cosmos_predict2._src.predict2.action.datasets.dataset_mv_local import ActionConditionedMultiViewDataset_df
+from cosmos_predict2._src.predict2.action.datasets.dataset_local import Dataset_3D_DF
+from cosmos_predict2._src.predict2.action.datasets.dataset_mv_local import ActionConditionedMultiViewDataset_DF
 
 
 def test_datasets():
@@ -51,14 +51,14 @@ def test_datasets():
     )
     
     # ==========================================
-    # Test 1: Single-view Dataset_3D_df (backward compatibility)
+    # Test 1: Single-view Dataset_3D_DF (backward compatibility)
     # ==========================================
     print("\n" + "-" * 60)
-    print("Test 1: Single-view Dataset_3D_df (cam_ids=[0])")
+    print("Test 1: Single-view Dataset_3D_DF (cam_ids=[0])")
     print("-" * 60)
     
     start_time = time.time()
-    single_view_dataset = Dataset_3D_df(
+    single_view_dataset = Dataset_3D_DF(
         **common_params,
         cam_ids=[0],  # Only first camera (frame_camera_left)
     )
@@ -82,14 +82,14 @@ def test_datasets():
     print(f"Single view width: {single_view_width}")
     
     # ==========================================
-    # Test 2: Multi-view ActionConditionedMultiViewDataset_df (3 views)
+    # Test 2: Multi-view ActionConditionedMultiViewDataset_DF (3 views)
     # ==========================================
     print("\n" + "-" * 60)
-    print("Test 2: Multi-view ActionConditionedMultiViewDataset_df (cam_ids=[0, 1, 2])")
+    print("Test 2: Multi-view ActionConditionedMultiViewDataset_DF (cam_ids=[0, 1, 2])")
     print("-" * 60)
     
     start_time = time.time()
-    multi_view_dataset = ActionConditionedMultiViewDataset_df(
+    multi_view_dataset = ActionConditionedMultiViewDataset_DF(
         **common_params,
         cam_ids=[0, 1, 2],  # All 3 cameras
     )
@@ -136,7 +136,7 @@ def test_datasets():
     print("Test 4: Two-view configuration (cam_ids=[0, 2])")
     print("-" * 60)
     
-    two_view_dataset = ActionConditionedMultiViewDataset_df(
+    two_view_dataset = ActionConditionedMultiViewDataset_DF(
         **common_params,
         cam_ids=[0, 2],  # left + wrist
     )

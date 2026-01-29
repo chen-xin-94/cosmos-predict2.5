@@ -5,7 +5,7 @@ Data preprocessing scripts are under `avla_data_preprocessing/`
 Training annotations (json files) are stored under `datasets/df/avla_nov_8_merged_per_embodiment_2025-11-12/fr3_single_arm_franka_hand/annotation/`
 The full episodes are recorded. During training, set `fps_downsample_ratio=6` to simulate training with `FPS=5` for consistency with bridge dataset.
 
-Class `Dataset_3D_df` is defined in `cosmos_predict2/_src/predict2/action/datasets/dataset_local.py`. The experiment configurations are defined in `cosmos_predict2/experiments/base/action.py`.
+Class `Dataset_3D_DF` is defined in `cosmos_predict2/_src/predict2/action/datasets/dataset_local.py`. The experiment configurations are defined in `cosmos_predict2/experiments/base/action.py`.
 
 It appears that action-conditioned training requires no prompt (As in original post-training pipeline). Modified dataloader to also enable training with text.
 

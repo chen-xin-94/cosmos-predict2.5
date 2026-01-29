@@ -187,7 +187,7 @@ def load_multiview_action_fn():
     """
     Multi-view action loading function that loads all camera views and concatenates them.
     
-    This function mirrors the training behavior of ActionConditionedMultiViewDataset_df._get_obs()
+    This function mirrors the training behavior of ActionConditionedMultiViewDataset_DF._get_obs()
     which loads frames from all camera IDs and concatenates them along the width dimension.
     """
 

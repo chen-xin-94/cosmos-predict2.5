@@ -435,7 +435,7 @@ class Dataset_3D(Dataset):
             return self[np.random.randint(len(self.samples))]
 
 
-class Dataset_3D_df(Dataset_3D):
+class Dataset_3D_DF(Dataset_3D):
     def __init__(
         self,
         train_annotation_path,

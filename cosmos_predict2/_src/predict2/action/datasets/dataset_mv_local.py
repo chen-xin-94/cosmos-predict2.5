@@ -27,7 +27,7 @@ import time
 
 import torch
 
-from cosmos_predict2._src.predict2.action.datasets.dataset_local import Dataset_3D, Dataset_3D_df
+from cosmos_predict2._src.predict2.action.datasets.dataset_local import Dataset_3D, Dataset_3D_DF
 
 
 class ActionConditionedMultiViewDataset(Dataset_3D):
@@ -75,10 +75,10 @@ class ActionConditionedMultiViewDataset(Dataset_3D):
         return samples
 
 
-class ActionConditionedMultiViewDataset_df(Dataset_3D_df):
-    """Multi-view variant of Dataset_3D_df supporting 3+ camera views.
+class ActionConditionedMultiViewDataset_DF(Dataset_3D_DF):
+    """Multi-view variant of Dataset_3D_DF supporting 3+ camera views.
     
-    This class extends Dataset_3D_df to concatenate multiple camera views
+    This class extends Dataset_3D_DF to concatenate multiple camera views
     along the width dimension. Unlike ActionConditionedMultiViewDataset which
     is limited to 2 views with a specific selection pattern, this class
     supports an arbitrary number of views specified in cam_ids.
@@ -88,7 +88,7 @@ class ActionConditionedMultiViewDataset_df(Dataset_3D_df):
             JSON "videos" list. Example: [0, 1, 2] for all 3 views.
     
     Example usage:
-        dataset = ActionConditionedMultiViewDataset_df(
+        dataset = ActionConditionedMultiViewDataset_DF(
             ...,
             cam_ids=[0, 1, 2],  # All 3 views concatenated
             ...

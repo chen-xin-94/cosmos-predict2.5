@@ -14,10 +14,10 @@ from typing import Sequence
 import numpy as np
 import torch
 
-from cosmos_predict2._src.predict2.action.datasets.dataset_local import Dataset_3D_df
+from cosmos_predict2._src.predict2.action.datasets.dataset_local import Dataset_3D_DF
 
 
-class ActionMultiViewDatasetDF(Dataset_3D_df):
+class ActionMultiViewDatasetDF(Dataset_3D_DF):
     """Action-conditioned multiview dataset with temporal concatenation.
 
     Produces video tensors shaped as C x (V*T) x H x W and multiview metadata

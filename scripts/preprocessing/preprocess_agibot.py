@@ -20,15 +20,12 @@ Usage:
 
 import argparse
 import json
-import os
 from pathlib import Path
-from typing import Any
 
 import h5py
 import numpy as np
-from tqdm import tqdm
-
 from agibot_config import ACTION_KEYS, STATE_KEYS, VIDEO_VIEWS
+from tqdm import tqdm
 
 
 def load_task_info(task_json_path: Path) -> dict[int, dict]:
