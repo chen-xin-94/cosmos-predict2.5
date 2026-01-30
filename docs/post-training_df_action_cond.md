@@ -39,13 +39,13 @@ export CUDA_VISIBLE_DEVICES=0
 
 torchrun --nproc_per_node=1 --master_port=$((12000 + RANDOM % 10000)) -m scripts.train --config=cosmos_predict2/_src/predict2/action/configs/action_conditioned/config.py  -- experiment=ac_reason_embeddings_rectified_flow_2b_256_320_df ~dataloader_train.dataloaders
 ```
-With this setting, the checkpoint will be saved under `cosmos-predict2.5/imaginaire-output`
+With this setting, the checkpoint will be saved under `imaginaire-output`
 
 
 ## 4. Convert checkpoint and inference
 
 ### 4.1 Converting DCP checkpoint to consolidated PyTorch format
-After the checkpoint is saved, it need to be converted to PyTorch format (`scripts/conver_checkpoints.sh`):
+After the checkpoint is saved, it need to be converted to PyTorch format (`scripts/convert_checkpoints.sh`):
 ```
 CHECKPOINTS_DIR=${IMAGINAIRE_OUTPUT_ROOT:-/tmp/imaginaire4-output}/cosmos_predict2_action_conditioned/cosmos_predict_v2p5/2b_avla_action_w_text_conditioned_10k_bs4/checkpoints
 CHECKPOINT_ITER=$(cat $CHECKPOINTS_DIR/latest_checkpoint.txt)
