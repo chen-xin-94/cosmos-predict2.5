@@ -34,7 +34,6 @@ import traceback
 import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import ffmpeg
 import numpy as np
 import torch
 from torch.utils.data import Dataset
@@ -45,13 +44,16 @@ from cosmos_predict2._src.imaginaire.utils.dataset_utils import (
     Resize_Preprocess,
     ToTensorVideo,
 )
+from cosmos_predict2._src.predict2.action.datasets.dataset_df import Dataset_3D_DF
 
 
-class Dataset_3D_AGIBOT(Dataset):
+class Dataset_3D_AGIBOT(Dataset_3D_DF):
     """Dataset class for loading AgiBotWorld action-conditioned data.
 
-    This dataset loads robot trajectories consisting of RGB video frames and
-    pre-computed 36-dimensional actions directly from JSON annotations.
+    This dataset extends Dataset_3D_DF to support AgiBotWorld-specific features:
+    - Pre-computed 36-dimensional actions loaded directly from JSON
+    - Multi-task support: traverses all task folders under base_annotation_path
+    - Actions are pre-scaled to [0, 1], no scaler applied
 
     Args:
         base_annotation_path (str): Base path to annotation files (e.g., "datasets/agibot/annotation")
@@ -94,64 +96,52 @@ class Dataset_3D_AGIBOT(Dataset):
         state_key="state",
         text_key="text",
     ):
-        super().__init__()
         self.base_annotation_path = base_annotation_path
-        self.video_path = video_path
-        self.fps_downsample_ratio = fps_downsample_ratio
-        self.mode = mode
-
-        if mode == "train":
-            self.start_frame_interval = 1
-        else:
-            self.start_frame_interval = val_start_frame_interval
-
-        self.sequence_length = 1 + num_action_per_chunk
-        self.normalize = normalize
-        self.pre_encode = pre_encode
-        self.load_t5_embeddings = load_t5_embeddings
-        self.load_action = load_action
-
-        self.cam_ids = cam_ids
-        self.accumulate_action = accumulate_action
-
-        self.action_dim = 36  # AgiBotWorld action dimension
-        self._state_key = state_key
-        self._text_key = text_key
-
-        # Collect annotation files from all task directories
-        self.ann_files = self._init_anns(self.base_annotation_path)
-        print(f"{len(self.ann_files)} trajectories in total")
-
-        self.samples = self._init_sequences(self.ann_files)
-        self.samples = sorted(self.samples, key=lambda x: (x["ann_file"], x["frame_ids"][0]))
-
-        if debug and not do_evaluate:
-            self.samples = self.samples[0:10]
-
-        print(f"{len(self.ann_files)} trajectories in total")
-        print(f"{len(self.samples)} samples in total")
-
-        self.wrong_number = 0
-        self.transform = T.Compose([T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True)])
-        self.training = False
-        self.preprocess = T.Compose(
-            [
-                ToTensorVideo(),
-                Resize_Preprocess(tuple(video_size)),
-                T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True),
-            ]
+        
+        # Call parent constructor
+        super().__init__(
+            train_annotation_path=base_annotation_path,  # Will be overridden by _init_anns
+            val_annotation_path=base_annotation_path,
+            test_annotation_path=base_annotation_path,
+            video_path=video_path,
+            fps_downsample_ratio=fps_downsample_ratio,
+            num_action_per_chunk=num_action_per_chunk,
+            cam_ids=cam_ids,
+            accumulate_action=accumulate_action,
+            video_size=video_size,
+            val_start_frame_interval=val_start_frame_interval,
+            debug=debug,
+            normalize=normalize,
+            pre_encode=pre_encode,
+            do_evaluate=do_evaluate,
+            load_t5_embeddings=load_t5_embeddings,
+            load_action=load_action,
+            mode=mode,
+            state_key=state_key,
+            gripper_key="continuous_gripper_state",  # Not used but required by parent
+            text_key=text_key,
+            gripper_rescale_factor=1.0,
+            is_rollout=None,
         )
-        self.not_norm_preprocess = T.Compose([ToTensorVideo(), Resize_Preprocess(tuple(video_size))])
+        
+        # Override action dimension AFTER parent init (parent sets action_dim=7 by default)
+        self.action_dim = 36  # AgiBotWorld action dimension
+        # No action scaling for AGIBOT (actions already in [0,1])
+        self.c_act_scaler = 1.0
 
     def __str__(self):
         return f"{len(self.ann_files)} samples from {self.base_annotation_path}"
 
-    def _init_anns(self, base_path):
+    def _init_anns(self, data_dir):
         """Traverse all task directories and collect annotation files.
         
         Structure: base_path/task_*/[train|val|test]/*.json
+        
+        Args:
+            data_dir: Base annotation path (ignored, uses self.base_annotation_path)
         """
         ann_files = []
+        base_path = self.base_annotation_path
         
         # List all task directories
         if not os.path.exists(base_path):
@@ -176,138 +166,25 @@ class Dataset_3D_AGIBOT(Dataset):
         
         return ann_files
 
-    def _init_sequences(self, ann_files):
-        samples = []
-        with ThreadPoolExecutor(32) as executor:
-            future_to_ann_file = {
-                executor.submit(self._load_and_process_ann_file, ann_file): ann_file for ann_file in ann_files
-            }
-            for future in tqdm(as_completed(future_to_ann_file), total=len(ann_files)):
-                samples.extend(future.result())
-        return samples
-
-    def _load_and_process_ann_file(self, ann_file):
-        samples = []
-        with open(ann_file, "r") as f:
-            ann = json.load(f)
-
-        n_frames = len(ann["action"])  # Use action length as reference
-
-        if isinstance(self.fps_downsample_ratio, int):
-            fps_downsample_ratio_list = [self.fps_downsample_ratio]
-        else:
-            fps_downsample_ratio_list = self.fps_downsample_ratio
-
-        for fps_downsample_ratio in fps_downsample_ratio_list:
-            for frame_i in range(0, n_frames, self.start_frame_interval):
-                sample = dict()
-                sample["ann_file"] = ann_file
-                sample["frame_ids"] = []
-                curr_frame_i = frame_i
-                while True:
-                    if curr_frame_i > (n_frames - 1):
-                        break
-                    sample["frame_ids"].append(curr_frame_i)
-                    if len(sample["frame_ids"]) == self.sequence_length:
-                        break
-                    curr_frame_i += fps_downsample_ratio
-                # make sure there are sequence_length number of frames
-                if len(sample["frame_ids"]) == self.sequence_length:
-                    samples.append(sample)
-        return samples
-
-    def __len__(self):
-        return len(self.samples)
-
-    def _load_video(self, video_path, frame_ids, fps=30):
-        """
-        Load specific frames from a video using FFmpeg.
-        Only decodes the required frames -> stable for various codecs.
-        Returns numpy array of (T, H, W, C).
-        """
-        frames = []
-        frame_ids_sorted = sorted(frame_ids)
-        H, W = None, None
-
-        for fid in frame_ids_sorted:
-            # Convert frame index -> timestamp in seconds
-            ts = fid / fps
-
-            # FFmpeg command to extract ONE frame
-            process = (
-                ffmpeg
-                .input(video_path, ss=ts)
-                .output('pipe:', vframes=1, format='rawvideo', pix_fmt='rgb24')
-                .run_async(pipe_stdout=True, pipe_stderr=True, quiet=True)
-            )
-
-            # Read raw frame bytes
-            out = process.stdout.read()
-            process.stdout.close()
-            process.wait()
-
-            if not out:
-                raise RuntimeError(f"Failed to decode frame {fid} @ {ts}s from {video_path}")
-
-            # Determine resolution by probing once
-            if H is None:
-                probe = ffmpeg.probe(video_path)
-                video_stream = next(s for s in probe['streams'] if s['codec_type'] == 'video')
-                W = int(video_stream['width'])
-                H = int(video_stream['height'])
-
-            # Reshape raw buffer -> (H, W, 3)
-            frame = np.frombuffer(out, np.uint8).reshape(H, W, 3)
-            frames.append(frame)
-
-        return np.stack(frames, axis=0)
-
-    def _get_frames(self, label, frame_ids, cam_id, pre_encode):
-        if pre_encode:
-            raise NotImplementedError("Pre-encoded videos are not supported for this dataset.")
-        else:
-            video_path = label["videos"][cam_id]["video_path"]
-            # video_path is absolute for AgiBotWorld
-            frames = self._load_video(video_path, frame_ids)
-            frames = frames.astype(np.uint8)
-            frames = torch.from_numpy(frames).permute(0, 3, 1, 2)  # (l, c, h, w)
-
-            if self.normalize:
-                frames = self.preprocess(frames)
-            else:
-                frames = self.not_norm_preprocess(frames)
-                frames = torch.clamp(frames * 255.0, 0, 255).to(torch.uint8)
-        return frames
-
-    def _get_obs(self, label, frame_ids, cam_id, pre_encode):
-        if cam_id is None:
-            temp_cam_id = random.choice(self.cam_ids)
-        else:
-            temp_cam_id = cam_id
-        frames = self._get_frames(label, frame_ids, cam_id=temp_cam_id, pre_encode=pre_encode)
-        return frames, temp_cam_id
-
-    def _get_text(self, label):
-        return label[self._text_key]
-
-    def _get_actions(self, label, frame_ids):
-        """Load actions directly from JSON annotation.
+    def _get_actions(self, arm_states, gripper_states, accumulate_action):
+        """Load actions directly from JSON annotation (called by parent's __getitem__).
+        
+        Note: This override changes the signature semantics - arm_states is actually
+        the label dict, and gripper_states/accumulate_action are ignored.
         
         AgiBotWorld actions are pre-computed 36-dim vectors already scaled to [0, 1].
         We return actions for frames 1 to sequence_length (not the first frame).
         """
-        all_actions = np.array(label["action"])
-        # Get actions corresponding to frame_ids[1:] (actions leading to those frames)
-        action_frame_ids = frame_ids[1:]  # sequence_length - 1 actions
-        actions = all_actions[action_frame_ids]
-        
-        assert actions.shape == (self.sequence_length - 1, self.action_dim), (
-            f"Expected actions shape ({self.sequence_length - 1}, {self.action_dim}), "
-            f"got {actions.shape}"
+        # HACK: Parent __getitem__ calls this with (arm_states, gripper_states, accumulate_action)
+        # but we need (label, frame_ids). We'll need to override __getitem__ to fix this properly.
+        # For now, this won't be called - see overridden __getitem__ below.
+        raise NotImplementedError(
+            "This method should not be called directly. "
+            "Use the overridden __getitem__ which loads actions from JSON."
         )
-        return torch.from_numpy(actions).float()
 
     def __getitem__(self, index, cam_id=None, return_video=False):
+        """Override to load actions directly from JSON instead of computing from states."""
         if self.mode != "train":
             np.random.seed(index)
             random.seed(index)
@@ -323,8 +200,16 @@ class Dataset_3D_AGIBOT(Dataset):
 
             data = dict()
             if self.load_action:
-                actions = self._get_actions(label, frame_ids)
-                data["action"] = actions
+                # Load actions directly from JSON (AgiBotWorld-specific)
+                all_actions = np.array(label["action"])
+                action_frame_ids = frame_ids[1:]  # Actions for frames 1 to sequence_length
+                actions = all_actions[action_frame_ids]
+                
+                assert actions.shape == (self.sequence_length - 1, self.action_dim), (
+                    f"Expected actions shape ({self.sequence_length - 1}, {self.action_dim}), "
+                    f"got {actions.shape}"
+                )
+                data["action"] = torch.from_numpy(actions).float()
 
             if self.pre_encode:
                 raise NotImplementedError("Pre-encoded videos are not supported for this dataset.")
