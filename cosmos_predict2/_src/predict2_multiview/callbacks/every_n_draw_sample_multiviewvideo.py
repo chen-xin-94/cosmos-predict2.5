@@ -410,11 +410,11 @@ class EveryNDrawSampleMultiviewVideo(EveryNDrawSample):
                 T = VT // n_views
                 mv_video = rearrange(mv_video, "B C (V T) H W -> B C V T H W", V=n_views)
 
-                        # Reorder views according to expected order
-                        mv_video = mv_video[:, :, reorder_indices, :, :, :]
+                # Reorder views according to expected order
+                mv_video = mv_video[:, :, reorder_indices, :, :, :]
 
-                        # Reshape back to original format
-                        mv_video = rearrange(mv_video, "B C V T H W -> B C (V T) H W")
+                # Reshape back to original format
+                mv_video = rearrange(mv_video, "B C V T H W -> B C (V T) H W")
 
             return rearrange(mv_video, "B C (V T) H W -> B C T H (V W)", V=n_views)
 

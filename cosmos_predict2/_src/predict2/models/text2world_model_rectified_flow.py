@@ -736,7 +736,6 @@ class Text2WorldModelRectifiedFlow(ImaginaireModel):
         # Obtain text embeddings online
         if self.config.text_encoder_config is not None and self.config.text_encoder_config.compute_online:
             if self.config.conditioner.text.use_prompt:
-            # text_embeddings = self.text_encoder.compute_text_embeddings_online(data_batch, self.input_caption_key)
                 text_embeddings = self.text_encoder.compute_text_embeddings_online(data_batch, self.input_text_key)
             else:
                 text_embeddings = self.text_encoder.compute_text_embeddings_online(data_batch, self.input_caption_key)
