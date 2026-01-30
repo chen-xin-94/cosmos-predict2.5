@@ -185,7 +185,6 @@ ac_reason_embeddings_rectified_flow_2b_multiview_448_1344 = LazyDict(
             group="cosmos_predict_v2p5",
             name=f"2b_avla_multiview_action_conditioned_448_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
             wandb_mode="online",
-            # wandb_mode="disabled",
         ),
         optimizer=dict(
             lr=2 ** (-14.5),
@@ -310,13 +309,88 @@ ac_reason_embeddings_rectified_flow_2b_agibot_480_1920 = LazyDict(
 
 cs = ConfigStore.instance()
 
+
+"""
+Smoke Test for Multi-view 3-camera action-conditioned training
+Resolution: 448x1344 (3 views of 448x448 concatenated along width)
+Uses smaller dataset from assets/action_conditioned/concat_view/df
+
+torchrun --nproc_per_node=1 --master_port=12341 -m scripts.train --config=cosmos_predict2/_src/predict2/action/configs/action_conditioned/config.py  -- experiment=ac_reason_embeddings_rectified_flow_2b_multiview_448_1344_smoke ~dataloader_train.dataloaders
+"""
+ac_reason_embeddings_rectified_flow_2b_multiview_448_1344_smoke = LazyDict(
+    dict(
+        defaults=[
+            "ac_reason_embeddings_rectified_flow_2b_multiview_448_1344",  # Inherit from the full experiment
+            {"override /data_train": "avla_franka_multiview_13frame_448_1344_smoke_train"},
+            {"override /data_val": "avla_franka_multiview_13frame_448_1344_smoke_val"},
+            "_self_",
+        ],
+        job=dict(
+            name=f"2b_avla_multiview_action_conditioned_448_smoke_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            wandb_mode="disabled",
+        ),
+        trainer=dict(
+            max_iter=100,
+            logging_iter=10,
+            callbacks=dict(
+                every_n_sample_reg=dict(every_n=10, do_x0_prediction=False, guidance=[0, 3, 7], fps=16, save_s3=False),
+                every_n_sample_ema=dict(every_n=10, do_x0_prediction=False, guidance=[0, 3, 7], fps=16, save_s3=False),
+            ),
+        ),
+        checkpoint=dict(
+            save_iter=10,
+        ),
+    ),
+    flags={"allow_objects": True},
+)
+
+
+"""
+Smoke Test for AgiBotWorld Multi-view 3-camera action-conditioned training
+Resolution: 480x1920 (3 views of 480x640 concatenated along width)
+Action dimension: 36 (pre-scaled to [0, 1])
+Uses smaller dataset from assets/action_conditioned/concat_view/agibot/annotation
+
+torchrun --nproc_per_node=1 --master_port=12341 -m scripts.train --config=cosmos_predict2/_src/predict2/action/configs/action_conditioned/config.py  -- experiment=ac_reason_embeddings_rectified_flow_2b_agibot_480_1920_smoke ~dataloader_train.dataloaders
+"""
+ac_reason_embeddings_rectified_flow_2b_agibot_480_1920_smoke = LazyDict(
+    dict(
+        defaults=[
+            "ac_reason_embeddings_rectified_flow_2b_agibot_480_1920",  # Inherit from the full experiment
+            {"override /data_train": "agibot_multiview_13frame_480_1920_smoke_train"},
+            {"override /data_val": "agibot_multiview_13frame_480_1920_smoke_val"},
+            "_self_",
+        ],
+        job=dict(
+            name=f"2b_agibot_multiview_action_conditioned_480_smoke_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            wandb_mode="disabled",
+        ),
+        trainer=dict(
+            max_iter=100,
+            logging_iter=10,
+            callbacks=dict(
+                every_n_sample_reg=dict(every_n=10, do_x0_prediction=False, guidance=[0, 3, 7], fps=16, save_s3=False),
+                every_n_sample_ema=dict(every_n=10, do_x0_prediction=False, guidance=[0, 3, 7], fps=16, save_s3=False),
+            ),
+        ),
+        checkpoint=dict(
+            save_iter=10,
+        ),
+    ),
+    flags={"allow_objects": True},
+)
+
+
 # Map of experiment configs to their static registration names (used by Hydra)
 # The actual job.name will have timestamps, but Hydra needs static names
 experiments = {
     ac_reason_embeddings_rectified_flow_2b_256_320_df: "ac_reason_embeddings_rectified_flow_2b_256_320_df",
     ac_reason_embeddings_rectified_flow_2b_multiview_448_1344: "ac_reason_embeddings_rectified_flow_2b_multiview_448_1344",
     ac_reason_embeddings_rectified_flow_2b_agibot_480_1920: "ac_reason_embeddings_rectified_flow_2b_agibot_480_1920",
+    ac_reason_embeddings_rectified_flow_2b_multiview_448_1344_smoke: "ac_reason_embeddings_rectified_flow_2b_multiview_448_1344_smoke",
+    ac_reason_embeddings_rectified_flow_2b_agibot_480_1920_smoke: "ac_reason_embeddings_rectified_flow_2b_agibot_480_1920_smoke",
 }
+
 
 for config, static_name in experiments.items():
     cs.store(group="experiment", package="_global_", name=static_name, node=config)

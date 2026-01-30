@@ -50,6 +50,15 @@ df_test_annotation_path = os.path.join(df_base_path, "annotation/test")
 # agibot annotation path - will traverse all task subdirectories
 agibot_base_annotation_path = "datasets/agibot/annotation"
 
+# Smoke test dataset paths (smaller subsets for quick testing)
+df_smoke_base_path = "/raid/chen.xin/repo/cosmos-predict2.5/assets/action_conditioned/concat_view/df"
+df_smoke_train_annotation_path = os.path.join(df_smoke_base_path, "annotation/train")
+df_smoke_val_annotation_path = os.path.join(df_smoke_base_path, "annotation/val")
+df_smoke_test_annotation_path = os.path.join(df_smoke_base_path, "annotation/test")
+
+agibot_smoke_base_annotation_path = "assets/action_conditioned/concat_view/agibot/annotation"
+
+
 # experiment for next-frame prediction
 bridge_train_dataset = L(Dataset_3D)(
     train_annotation_path=bridge_train_annotation_path,
@@ -347,6 +356,99 @@ agibot_multiview_13frame_480_1920_val_dataloader = L(DataLoader)(
 ################################################
 
 
+################### Smoke Test Multi-View DF Dataset (3 views, width-concatenated) ###################
+
+# Smoke test multi-view 3-camera dataset: 448x1344 (3x448 width)
+avla_franka_multiview_13frame_448_1344_smoke_train_dataset = L(ActionConditionedMultiViewDataset_DF)(
+    train_annotation_path=df_smoke_train_annotation_path,
+    val_annotation_path=df_smoke_val_annotation_path,
+    test_annotation_path=df_smoke_test_annotation_path,
+    video_path=df_smoke_base_path,
+    fps_downsample_ratio=1,
+    num_action_per_chunk=12,
+    cam_ids=[0, 1, 2],  # All 3 cameras: left, top, wrist
+    accumulate_action=False,
+    video_size=[448, 448],  # Native resolution per view, concat to 448x1344
+    val_start_frame_interval=1,
+    mode="train",
+)
+avla_franka_multiview_13frame_448_1344_smoke_val_dataset = L(ActionConditionedMultiViewDataset_DF)(
+    train_annotation_path=df_smoke_train_annotation_path,
+    val_annotation_path=df_smoke_val_annotation_path,
+    test_annotation_path=df_smoke_test_annotation_path,
+    video_path=df_smoke_base_path,
+    fps_downsample_ratio=1,
+    num_action_per_chunk=12,
+    cam_ids=[0, 1, 2],  # All 3 cameras: left, top, wrist
+    accumulate_action=False,
+    video_size=[448, 448],  # Native resolution per view, concat to 448x1344
+    val_start_frame_interval=100,
+    mode="val",
+)
+
+avla_franka_multiview_13frame_448_1344_smoke_train_dataloader = L(DataLoader)(
+    dataset=avla_franka_multiview_13frame_448_1344_smoke_train_dataset,
+    sampler=L(get_sampler)(dataset=avla_franka_multiview_13frame_448_1344_smoke_train_dataset),
+    batch_size=1,
+    drop_last=True,
+    num_workers=4,
+    pin_memory=True,
+)
+avla_franka_multiview_13frame_448_1344_smoke_val_dataloader = L(DataLoader)(
+    dataset=avla_franka_multiview_13frame_448_1344_smoke_val_dataset,
+    sampler=L(get_sampler)(dataset=avla_franka_multiview_13frame_448_1344_smoke_val_dataset),
+    batch_size=1,
+    drop_last=True,
+    num_workers=4,
+    pin_memory=True,
+)
+################################################
+
+
+################### Smoke Test AgiBotWorld Multi-View Dataset (3 views, width-concatenated to 480x1920) ###################
+
+# Smoke test multi-view 3-camera dataset: 480x1920 (3x640 width)
+agibot_multiview_13frame_480_1920_smoke_train_dataset = L(ActionConditionedMultiViewDataset_AGIBOT)(
+    base_annotation_path=agibot_smoke_base_annotation_path,
+    video_path="",  # Not used, paths are absolute in JSON
+    fps_downsample_ratio=1,
+    num_action_per_chunk=12,
+    cam_ids=[0, 1, 2],  # All 3 cameras: hand_left, head, hand_right
+    accumulate_action=False,
+    video_size=[480, 640],  # Per-view resolution, concatenated to 480x1920
+    val_start_frame_interval=1,
+    mode="train",
+)
+agibot_multiview_13frame_480_1920_smoke_val_dataset = L(ActionConditionedMultiViewDataset_AGIBOT)(
+    base_annotation_path=agibot_smoke_base_annotation_path,
+    video_path="",  # Not used, paths are absolute in JSON
+    fps_downsample_ratio=1,
+    num_action_per_chunk=12,
+    cam_ids=[0, 1, 2],  # All 3 cameras: hand_left, head, hand_right
+    accumulate_action=False,
+    video_size=[480, 640],  # Per-view resolution, concatenated to 480x1920
+    val_start_frame_interval=100,
+    mode="val",
+)
+
+agibot_multiview_13frame_480_1920_smoke_train_dataloader = L(DataLoader)(
+    dataset=agibot_multiview_13frame_480_1920_smoke_train_dataset,
+    sampler=L(get_sampler)(dataset=agibot_multiview_13frame_480_1920_smoke_train_dataset),
+    batch_size=1,
+    drop_last=True,
+    num_workers=4,
+    pin_memory=True,
+)
+agibot_multiview_13frame_480_1920_smoke_val_dataloader = L(DataLoader)(
+    dataset=agibot_multiview_13frame_480_1920_smoke_val_dataset,
+    sampler=L(get_sampler)(dataset=agibot_multiview_13frame_480_1920_smoke_val_dataset),
+    batch_size=1,
+    drop_last=True,
+    num_workers=4,
+    pin_memory=True,
+)
+################################################
+
 
 def register_training_and_val_data():
     cs = ConfigStore.instance()
@@ -419,6 +521,34 @@ def register_training_and_val_data():
         package="dataloader_val",
         name="agibot_multiview_13frame_480_1920_val",
         node=agibot_multiview_13frame_480_1920_val_dataloader,
+    )
+
+    # Smoke Test Multi-view 3-camera 13 frame 448x1344
+    cs.store(
+        group="data_train",
+        package="dataloader_train",
+        name="avla_franka_multiview_13frame_448_1344_smoke_train",
+        node=avla_franka_multiview_13frame_448_1344_smoke_train_dataloader,
+    )
+    cs.store(
+        group="data_val",
+        package="dataloader_val",
+        name="avla_franka_multiview_13frame_448_1344_smoke_val",
+        node=avla_franka_multiview_13frame_448_1344_smoke_val_dataloader,
+    )
+
+    # Smoke Test AgiBotWorld Multi-view 3-camera 13 frame 480x1920
+    cs.store(
+        group="data_train",
+        package="dataloader_train",
+        name="agibot_multiview_13frame_480_1920_smoke_train",
+        node=agibot_multiview_13frame_480_1920_smoke_train_dataloader,
+    )
+    cs.store(
+        group="data_val",
+        package="dataloader_val",
+        name="agibot_multiview_13frame_480_1920_smoke_val",
+        node=agibot_multiview_13frame_480_1920_smoke_val_dataloader,
     )
 
     # Register gr00t_customized_gr1 data
