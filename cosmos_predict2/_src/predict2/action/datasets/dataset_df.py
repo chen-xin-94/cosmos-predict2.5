@@ -27,8 +27,7 @@ import random
 import time
 import traceback
 import warnings
-
-import ffmpeg
+import subprocess
 import imageio
 import numpy as np
 import torch
@@ -107,46 +106,60 @@ class Dataset_3D_DF(Dataset_3D):
 
     def _load_video(self, video_path, frame_ids, fps=30):
         """
-        Load specific frames from a video using FFmpeg.
+        Load specific frames from a video using FFmpeg batch extraction.
         Only decodes the required frames -> stable for AV1.
-        Returns numpy array of (T, H, W, C).
+        Returns numpy array of (T, H, W, C) with frames in the order of frame_ids.
         """
-
-        frames = []
+        
+        # Sort frame IDs for batch extraction (but remember original order)
         frame_ids_sorted = sorted(frame_ids)
-
-        for fid in frame_ids_sorted:
-            # convert frame index -> timestamp in seconds
-            ts = fid / fps
-
-            # FFmpeg command to extract ONE frame
-            process = (
-                ffmpeg
-                .input(video_path, ss=ts)
-                .output('pipe:', vframes=1, format='rawvideo', pix_fmt='rgb24')
-                .run_async(pipe_stdout=True, pipe_stderr=True, quiet=True)
-            )
-
-            # read raw frame bytes
-            out = process.stdout.read()
-            process.stdout.close()
-            process.wait()
-
-            if not out:
-                raise RuntimeError(f"Failed to decode frame {fid} @ {ts}s from {video_path}")
-
-            # Determine resolution by probing once
-            if len(frames) == 0:
-                probe = ffmpeg.probe(video_path)
-                video_stream = next(s for s in probe['streams'] if s['codec_type'] == 'video')
-                W = int(video_stream['width'])
-                H = int(video_stream['height'])
-
-            # reshape raw buffer -> (H, W, 3)
-            frame = np.frombuffer(out, np.uint8).reshape(H, W, 3)
-            frames.append(frame)
-
-        return np.stack(frames, axis=0)
+        
+        # Probe video to get resolution using ffprobe CLI
+        probe_cmd = [
+            'ffprobe',
+            '-v', 'quiet',
+            '-print_format', 'json',
+            '-show_streams',
+            video_path
+        ]
+        probe_result = subprocess.run(probe_cmd, capture_output=True, text=True)
+        probe_data = json.loads(probe_result.stdout)
+        video_stream = next(s for s in probe_data['streams'] if s['codec_type'] == 'video')
+        W = int(video_stream['width'])
+        H = int(video_stream['height'])
+        
+        # Build FFmpeg select filter to extract specific frames
+        # eq(n,5) means "select frame number 5"
+        # Join with + to select multiple frames
+        select_expr = '+'.join([f'eq(n\\,{fid})' for fid in frame_ids_sorted])
+        
+        # Single FFmpeg command to extract all requested frames
+        cmd = [
+            'ffmpeg',
+            '-i', video_path,
+            '-vf', f'select={select_expr}',  # Select only these frames
+            '-vsync', '0',                    # Don't duplicate/drop frames
+            '-f', 'rawvideo',
+            '-pix_fmt', 'rgb24',
+            'pipe:1'
+        ]
+        
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out, err = process.communicate()
+        
+        if process.returncode != 0 or not out:
+            raise RuntimeError(f"Failed to decode frames {frame_ids_sorted} from {video_path}")
+        
+        # Reshape raw bytes -> (T, H, W, 3) in sorted order
+        num_frames = len(frame_ids)
+        frames = np.frombuffer(out, dtype=np.uint8).reshape(num_frames, H, W, 3)
+        
+        # Reorder frames to match original frame_ids order (if not already sorted)
+        if frame_ids != frame_ids_sorted:
+            reorder_idx = [frame_ids_sorted.index(fid) for fid in frame_ids]
+            frames = frames[reorder_idx]
+        
+        return frames
     
     def _get_frames(self, label, frame_ids, cam_id, pre_encode):
         """Override to not use os.path.join with self.video_path."""

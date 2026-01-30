@@ -29,7 +29,6 @@ import traceback
 import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import ffmpeg
 import imageio
 import numpy as np
 import torch
