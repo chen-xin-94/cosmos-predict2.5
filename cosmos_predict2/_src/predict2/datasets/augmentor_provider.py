@@ -110,63 +110,111 @@ def get_video_text_transform(
     num_video_frames: int = -1,
 ):
     del num_video_frames
+
+    # common args that are shared across all caption types
+    base_args = {
+        "captions_key": "metas",
+        "embeddings_key": embedding_type,
+        "t5_tokens": {"num": 512},
+        "is_mask_all_ones": True,
+    }
+    caption_probs = {
+        "long": long_caption_ratio,
+        "medium": medium_caption_ratio,
+        "short": short_caption_ratio,
+        "user": user_caption_ratio,
+    }
+
     if caption_type == "vila_caption":
-        video_text_transform = L(text_transforms_for_video.TextTransformForVideo)(
-            input_keys=[],
-            args={
-                "captions_key": "metas",
-                "embeddings_key": embedding_type,
-                "caption_windows_key": "windows",
-                "caption_type": "vila_caption",
-                "embedding_caption_type": "vila_caption",
-                "t5_tokens": {"num": 512},
-                "is_mask_all_ones": True,
-            },
-        )
+        args = {
+            **base_args,
+            "caption_windows_key": "windows",
+            "caption_type": "vila_caption",
+            "embedding_caption_type": "vila_caption",
+        }
     elif caption_type == "t2w_qwen2p5_7b":
         log.info(
             f"caption_type: {caption_type}, long_caption_ratio: {long_caption_ratio}, medium_caption_ratio: {medium_caption_ratio}, short_caption_ratio: {short_caption_ratio}, user_caption_ratio: {user_caption_ratio}"
         )
-        video_text_transform = L(text_transforms_for_video.TextTransformForVideo)(
-            input_keys=[],
-            args={
-                "captions_key": "metas",
-                "embeddings_key": embedding_type,
-                "caption_windows_key": "t2w_windows",
-                "caption_type": "qwen2p5_7b_caption",
-                "embedding_caption_type": "t2w_qwen2p5_7b",
-                "t5_tokens": {"num": 512},
-                "is_mask_all_ones": True,
-                "caption_probs": {
-                    "long": long_caption_ratio,
-                    "medium": medium_caption_ratio,
-                    "short": short_caption_ratio,
-                    "user": user_caption_ratio,
-                },
-            },
-        )
+        args = {
+            **base_args,
+            "caption_windows_key": "t2w_windows",
+            "caption_type": "qwen2p5_7b_caption",
+            "embedding_caption_type": caption_type,
+            "caption_probs": caption_probs,
+        }
     elif caption_type == "i2w_qwen2p5_7b_later_frames":
-        video_text_transform = L(text_transforms_for_video.TextTransformForVideo)(
-            input_keys=[],
-            args={
-                "captions_key": "metas",
-                "embeddings_key": embedding_type,
-                "caption_windows_key": "i2w_windows_later_frames",
-                "caption_type": "qwen2p5_7b_caption",
-                "embedding_caption_type": "i2w_qwen2p5_7b_later_frames",
-                "t5_tokens": {"num": 512},
-                "is_mask_all_ones": True,
-                "caption_probs": {
-                    "long": long_caption_ratio,
-                    "medium": medium_caption_ratio,
-                    "short": short_caption_ratio,
-                    "user": user_caption_ratio,
-                },
-            },
+        args = {
+            **base_args,
+            "caption_windows_key": "i2w_windows_later_frames",
+            "caption_type": "qwen2p5_7b_caption",
+            "embedding_caption_type": caption_type,
+            "caption_probs": caption_probs,
+        }
+    elif caption_type == "t2w_qwen3_vl_30b_a3b":
+        log.info(
+            f"caption_type: {caption_type}, long_caption_ratio: {long_caption_ratio}, medium_caption_ratio: {medium_caption_ratio}, short_caption_ratio: {short_caption_ratio}, user_caption_ratio: {user_caption_ratio}"
         )
+        args = {
+            **base_args,
+            "caption_windows_key": "t2w_windows",
+            "caption_type": "qwen3_vl_30b_a3b_caption",
+            "embedding_caption_type": caption_type,
+            "caption_probs": caption_probs,
+        }
+    elif caption_type == "i2w_qwen3_vl_30b_a3b_later_frames":
+        args = {
+            **base_args,
+            "caption_windows_key": "i2w_windows_later_frames",
+            "caption_type": "qwen3_vl_30b_a3b_caption",
+            "embedding_caption_type": caption_type,
+            "caption_probs": caption_probs,
+        }
+    elif caption_type == "t2w_qwen3_vl_235b":
+        log.info(
+            f"caption_type: {caption_type}, long_caption_ratio: {long_caption_ratio}, medium_caption_ratio: {medium_caption_ratio}, short_caption_ratio: {short_caption_ratio}, user_caption_ratio: {user_caption_ratio}"
+        )
+        args = {
+            **base_args,
+            "caption_windows_key": "t2w_windows",
+            "caption_type": "qwen3_vl_235b_caption",
+            "embedding_caption_type": caption_type,
+            "caption_probs": caption_probs,
+        }
+    elif caption_type == "i2w_qwen3_vl_235b_later_frames":
+        args = {
+            **base_args,
+            "caption_windows_key": "i2w_windows_later_frames",
+            "caption_type": "qwen3_vl_235b_caption",
+            "embedding_caption_type": caption_type,
+            "caption_probs": caption_probs,
+        }
+    elif caption_type == "t2w_qwen3_vl_235b_fp8":
+        log.info(
+            f"caption_type: {caption_type}, long_caption_ratio: {long_caption_ratio}, medium_caption_ratio: {medium_caption_ratio}, short_caption_ratio: {short_caption_ratio}, user_caption_ratio: {user_caption_ratio}"
+        )
+        args = {
+            **base_args,
+            "caption_windows_key": "t2w_windows",
+            "caption_type": "qwen3_vl_235b_fp8_caption",
+            "embedding_caption_type": caption_type,
+            "caption_probs": caption_probs,
+        }
+    elif caption_type == "i2w_qwen3_vl_235b_fp8_later_frames":
+        args = {
+            **base_args,
+            "caption_windows_key": "i2w_windows_later_frames",
+            "caption_type": "qwen3_vl_235b_fp8_caption",
+            "embedding_caption_type": caption_type,
+            "caption_probs": caption_probs,
+        }
     else:
         raise ValueError(f"Unsupported caption type ({caption_type}) for video data")
 
+    video_text_transform = L(text_transforms_for_video.TextTransformForVideo)(
+        input_keys=[],
+        args=args,
+    )
     return video_text_transform
 
 
@@ -239,6 +287,8 @@ def get_video_augmentor_v2(
     use_native_fps: bool = True,
     use_original_fps: bool = False,
     use_random_consecutive_frames: bool = False,
+    use_random_interleaved_frames: bool = False,
+    prefer_crop_over_pad: bool = False,
 ):
     """
     num_video_frames: -1 means use all frames, otherwise use the number of frames specified.
@@ -251,6 +301,7 @@ def get_video_augmentor_v2(
     - extract captions and embeddings.
 
     When use_random_consecutive_frames is True, the augmentor will sample random consecutive frames, preserving the original fps.
+    When use_random_interleaved_frames is True, the augmentor will sample random interleaved frames, making fractional fps interpolation possible (e.g. 24->30fps).
 
     Supported caption_type include t2w_qwen2p5_7b and i2w_qwen2p5_7b_later_frames.
     Supported embedding_type include t5_xxl and umt5_xxl.
@@ -263,9 +314,9 @@ def get_video_augmentor_v2(
         short_caption_ratio=short_caption_ratio,
         user_caption_ratio=user_caption_ratio,
     )
-    if caption_type == "t2w_qwen2p5_7b":
+    if caption_type.startswith("t2w_qwen"):
         key_for_caption = "t2w_windows"
-    elif caption_type == "i2w_qwen2p5_7b_later_frames":
+    elif caption_type.startswith("i2w_qwen"):
         key_for_caption = "i2w_windows_later_frames"
     else:
         f"Unsupported caption type ({caption_type}) for video data"
@@ -275,6 +326,21 @@ def get_video_augmentor_v2(
             "umt5_xxl",
         ), f"Unsupported embeddings type ({embedding_type}) for video data"
 
+    resize_op = (
+        {
+            "resize_largest_side_aspect_ratio_preserving": L(resize.ResizeLargestSideAspectPreserving)(
+                input_keys=["video"],
+                args={"size": VIDEO_RES_SIZE_INFO[resolution]},
+            )  # Original version, prefer padding over cropping
+        }
+        if not prefer_crop_over_pad
+        else {
+            "resize_smallest_side_aspect_ratio_preserving": L(resize.ResizeSmallestSideAspectPreserving)(
+                input_keys=["video"],
+                args={"size": VIDEO_RES_SIZE_INFO[resolution]},
+            ),  # New version, prefer cropping over padding
+        }
+    )
     return {
         "video_parsing": L(video_parsing.VideoParsing)(
             input_keys=["metas", "video"],
@@ -287,7 +353,14 @@ def get_video_augmentor_v2(
                 "num_video_frames": num_video_frames,
                 "use_native_fps": use_native_fps,
                 "use_original_fps": use_original_fps,
+                # use_random_consecutive_frames:
+                #   If True, samples random consecutive frames within the window, preserving the original fps between frames.
+                #   This enables consecutive clips from the source, without evenly-spaced dropping/duplication.
                 "use_random_consecutive_frames": use_random_consecutive_frames,
+                # use_random_interleaved_frames:
+                #   If True, enables random interleaved frame subsampling (e.g., for fractional fps upsampling/downsampling such as 24->30 FPS).
+                #   Produces non-consecutive, randomly-traced clip segments by mixing different strides, for more varied temporal sampling.
+                "use_random_interleaved_frames": use_random_interleaved_frames,
             },
         ),
         "merge_datadict": L(merge_datadict.DataDictMerger)(
@@ -302,10 +375,7 @@ def get_video_augmentor_v2(
                 "n_orig_video_frames",
             ],
         ),
-        "resize_largest_side_aspect_ratio_preserving": L(resize.ResizeLargestSideAspectPreserving)(
-            input_keys=["video"],
-            args={"size": VIDEO_RES_SIZE_INFO[resolution]},
-        ),
+        **resize_op,
         "reflection_padding": L(padding.ReflectionPadding)(
             input_keys=["video"],
             args={"size": VIDEO_RES_SIZE_INFO[resolution]},
@@ -343,9 +413,9 @@ def get_noframedrop_nocameramove_video_augmentor_v1(
         short_caption_ratio=short_caption_ratio,
         user_caption_ratio=user_caption_ratio,
     )
-    if caption_type == "t2w_qwen2p5_7b":
+    if caption_type.startswith("t2w_qwen"):
         key_for_caption = "t2w_windows"
-    elif caption_type == "i2w_qwen2p5_7b_later_frames":
+    elif caption_type.startswith("i2w_qwen"):
         key_for_caption = "i2w_windows_later_frames"
     else:
         f"Unsupported caption type ({caption_type}) for video data"

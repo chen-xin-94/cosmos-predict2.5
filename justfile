@@ -5,10 +5,20 @@ package_name := `echo cosmos_* | tr '_' '-'`
 module_name := `echo cosmos_*`
 short_name := `for dir in cosmos_*; do echo "${dir#cosmos_}"; done`
 
+default_max_gpus := if arch() == "aarch64" {
+  "4"
+} else {
+  "8"
+}
+
 # Setup the repository
 setup:
 
-default_cuda_name := "cu128"
+default_cuda_name := if arch() == "aarch64" {
+  "cu130"
+} else {
+  "cu128"
+}
 
 # Install the repository
 install cuda_name=default_cuda_name *args: setup
@@ -21,6 +31,10 @@ _uv-sync *args: setup
     echo {{default_cuda_name}} > .cuda-name; \
   fi
   uv sync --extra=$(cat .cuda-name) {{args}}
+
+# Run a command in the package environment
+run *args: _uv-sync
+  uv run --no-sync {{args}}
 
 # Setup pre-commit
 _pre-commit-setup: setup
@@ -67,16 +81,18 @@ test-single name *args: _uv-sync
 test-cpu *args: _uv-sync
   uv run --no-sync pytest --num-gpus=0 -n logical --maxprocesses=16 --levels=0 {{pytest_args}} {{args}}
 
-# Run 1-GPU tests
-_test-gpu-1 *args: _uv-sync
-  uv run --no-sync pytest --num-gpus=1 -n logical --levels=0 {{pytest_args}} {{args}}
-
-# Run 8-GPU tests
-_test-gpu-8 *args: _uv-sync
-  uv run --no-sync pytest --num-gpus=8 -n logical --levels=0 {{pytest_args}} {{args}}
-
 # Run GPU tests
-test-gpu *args: (_test-gpu-1 args) (_test-gpu-8 args)
+test-gpu *args: _uv-sync
+  #!/usr/bin/env bash
+  set -euxo pipefail
+  export MAX_GPUS={{default_max_gpus}}
+  AVAILABLE_GPUS=$(nvidia-smi -L | wc -l)
+  for num_gpus in 1 $MAX_GPUS; do
+    if [ $num_gpus -gt $AVAILABLE_GPUS ]; then
+      break
+    fi
+    uv run --no-sync pytest --num-gpus=$num_gpus -n logical --levels=0 {{pytest_args}} {{args}}
+  done
 
 # Run custom pytest command
 _pytest *args: _uv-sync
@@ -93,9 +109,6 @@ test-level-1 *args: (test '--levels=1' args)
 
 # Run level 2 tests
 test-level-2 *args: (test '--levels=2' args)
-
-# Run tests with coverage report
-test-coverage *args: (test '--cov-append' '--cov-report=' '--cov=' + module_name args)
 
 # List tests
 test-list *args: _uv-sync
@@ -132,22 +145,21 @@ release-check: license _link-check
 release pypi_token='dry-run' *args:
   ./bin/release.sh {{pypi_token}} {{args}}
 
-docker_build_args := ''
-docker_run_args := '--ipc=host -v /root/.cache:/root/.cache'
-
 # Run the docker container
 _docker build_args='' run_args='':
   #!/usr/bin/env bash
   set -euxo pipefail
-  docker build {{docker_build_args}} {{build_args}} .
-  image_tag=$(docker build {{docker_build_args}} {{build_args}} -q .)
+  docker build {{build_args}} .
+  image_tag=$(docker build {{build_args}} -q .)
   docker run \
     -it \
-    --gpus all \
+    --runtime=nvidia \
+    --ipc=host \
     --rm \
     -v .:/workspace \
     -v /workspace/.venv \
-    {{docker_run_args}} \
+    -v /root/.cache:/root/.cache \
+    -e HF_TOKEN="$HF_TOKEN" \
     {{run_args}} \
     $image_tag
 

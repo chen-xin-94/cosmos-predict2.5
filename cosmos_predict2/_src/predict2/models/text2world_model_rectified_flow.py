@@ -16,7 +16,7 @@
 from __future__ import annotations
 
 import collections
-import math
+import os
 from contextlib import contextmanager
 from typing import Callable, Dict, Mapping, Optional, Tuple
 
@@ -46,7 +46,6 @@ from cosmos_predict2._src.imaginaire.utils.context_parallel import (
     find_split,
 )
 from cosmos_predict2._src.imaginaire.utils.count_params import count_params
-from cosmos_predict2._src.imaginaire.utils.denoise_prediction import DenoisePrediction
 from cosmos_predict2._src.imaginaire.utils.ema import FastEmaModelUpdater
 from cosmos_predict2._src.imaginaire.utils.fsdp_helper import hsdp_device_mesh
 from cosmos_predict2._src.imaginaire.utils.optim_instantiate import get_base_scheduler
@@ -54,10 +53,6 @@ from cosmos_predict2._src.predict2.conditioner import DataType, Text2WorldCondit
 from cosmos_predict2._src.predict2.datasets.utils import VIDEO_RES_SIZE_INFO
 from cosmos_predict2._src.predict2.models.fm_solvers_unipc import FlowUniPCMultistepScheduler
 from cosmos_predict2._src.predict2.models.text2world_model import EMAConfig
-from cosmos_predict2._src.predict2.modules.denoiser_scaling import (
-    EDM_sCMWrapper,
-    RectifiedFlow_sCMWrapper,
-)
 from cosmos_predict2._src.predict2.networks.model_weights_stats import WeightTrainingStat
 from cosmos_predict2._src.predict2.schedulers.rectified_flow import RectifiedFlow
 from cosmos_predict2._src.predict2.text_encoders.text_encoder import TextEncoder, TextEncoderConfig
@@ -142,9 +137,6 @@ class Text2WorldModelRectifiedFlow(ImaginaireModel):
         self.sigma_data = 1.0
         self.sigma_conditional = 0.0001
         self.change_time_embed = False
-        self.scaling_from_time = (
-            EDM_sCMWrapper(self.sigma_data) if scaling == "edm" else RectifiedFlow_sCMWrapper(self.sigma_data)
-        )
         self.setup_data_key()
 
         # 2. setup up rectified_flow and sampler
@@ -197,7 +189,7 @@ class Text2WorldModelRectifiedFlow(ImaginaireModel):
         self.input_caption_key = self.config.input_caption_key
         self.input_text_key = self.config.text_prompt_key
 
-    def build_net(self):
+    def build_net(self, keep_on_cpu: bool = False):
         config = self.config
 
         init_device = "meta"
@@ -207,29 +199,48 @@ class Text2WorldModelRectifiedFlow(ImaginaireModel):
 
             self._param_count = count_params(net, verbose=False)
 
-            with misc.timer("meta to cuda and broadcast model states"):
-                net.to_empty(device="cuda")
-                # IMPORTANT: (qsh) model init should not depends on current tensor shape, or it can handle Dtensor shape.
-                net.init_weights()
+            if keep_on_cpu:
+                # Move to CPU instead of CUDA to save GPU memory during checkpoint loading
+                with misc.timer("meta to cpu for deferred GPU materialization"):
+                    net.to_empty(device="cpu")
+                    net.init_weights()
 
-            # Add LoRA after base model init to ensure A~N(0,·), B=0) initialization
-            if config.use_lora:
-                net = self.add_lora(
-                    net,
-                    lora_rank=config.lora_rank,
-                    lora_alpha=config.lora_alpha,
-                    lora_target_modules=config.lora_target_modules,
-                    init_lora_weights=config.init_lora_weights,
-                    use_dora=config.use_dora,
-                )
+                # Add LoRA after base model init to ensure A~N(0,·), B=0) initialization
+                if config.use_lora:
+                    net = self.add_lora(
+                        net,
+                        lora_rank=config.lora_rank,
+                        lora_alpha=config.lora_alpha,
+                        lora_target_modules=config.lora_target_modules,
+                        init_lora_weights=config.init_lora_weights,
+                        use_dora=config.use_dora,
+                    )
+            else:
+                with misc.timer("meta to cuda and broadcast model states"):
+                    net.to_empty(device="cuda")
+                    # IMPORTANT: (qsh) model init should not depends on current tensor shape, or it can handle Dtensor shape.
+                    net.init_weights()
 
-            if self.fsdp_device_mesh:
-                net.fully_shard(mesh=self.fsdp_device_mesh)
-                net = fully_shard(net, mesh=self.fsdp_device_mesh, reshard_after_forward=True)
+                # Add LoRA after base model init to ensure A~N(0,·), B=0) initialization
+                if config.use_lora:
+                    net = self.add_lora(
+                        net,
+                        lora_rank=config.lora_rank,
+                        lora_alpha=config.lora_alpha,
+                        lora_target_modules=config.lora_target_modules,
+                        init_lora_weights=config.init_lora_weights,
+                        use_dora=config.use_dora,
+                    )
 
-                broadcast_dtensor_model_states(net, self.fsdp_device_mesh)
-                for name, param in net.named_parameters():
-                    assert isinstance(param, DTensor), f"param should be DTensor, {name} got {type(param)}"
+                if self.fsdp_device_mesh:
+                    net.fully_shard(mesh=self.fsdp_device_mesh)
+                    net = fully_shard(net, mesh=self.fsdp_device_mesh, reshard_after_forward=True)
+
+                    broadcast_dtensor_model_states(net, self.fsdp_device_mesh)
+                    for name, param in net.named_parameters():
+                        assert isinstance(param, DTensor), f"param should be DTensor, {name} got {type(param)}"
+        if int(os.environ.get("COSMOS_PREDICT2_OFFLOAD_DIT", "0")) > 0:
+            net.cpu()
         return net
 
     @misc.timer("DiffusionModel: set_up_model")
@@ -244,7 +255,10 @@ class Text2WorldModelRectifiedFlow(ImaginaireModel):
             self._param_count = count_params(self.net, verbose=False)
 
             if config.ema.enabled:
-                self.net_ema = self.build_net()
+                # Keep EMA on CPU initially to avoid OOM during model loading from consolidated checkpoint
+                # It will be moved to GPU and properly initialized in apply_fsdp()
+                keep_on_cpu = config.fsdp_shard_size == 1  # Keep on CPU if FSDP will be applied later
+                self.net_ema = self.build_net(keep_on_cpu=keep_on_cpu)
                 self.net_ema.requires_grad_(False)
 
                 if self.fsdp_device_mesh:
@@ -255,7 +269,9 @@ class Text2WorldModelRectifiedFlow(ImaginaireModel):
                 s = config.ema.rate
                 self.ema_exp_coefficient = np.roots([1, 7, 16 - s**-2, 12 - s**-2]).real.max()
 
-                self.net_ema_worker.copy_to(src_model=self.net, tgt_model=self.net_ema)
+                # Only copy if both models are on the same device (not CPU)
+                if not keep_on_cpu:
+                    self.net_ema_worker.copy_to(src_model=self.net, tgt_model=self.net_ema)
         torch.cuda.empty_cache()
 
     def apply_fsdp(self, dp_mesh: DeviceMesh) -> None:
@@ -265,11 +281,17 @@ class Text2WorldModelRectifiedFlow(ImaginaireModel):
         self.net = fully_shard(self.net, mesh=dp_mesh, reshard_after_forward=True)
         broadcast_dtensor_model_states(self.net, dp_mesh)
         if hasattr(self, "net_ema") and self.net_ema:
+            # If net_ema is on CPU, move it to CUDA first
+            if next(self.net_ema.parameters()).device.type == "cpu":
+                with misc.timer("Moving EMA model from CPU to CUDA"):
+                    self.net_ema.to(device="cuda")
+
             self.net_ema.fully_shard(mesh=dp_mesh)
             self.net_ema = fully_shard(self.net_ema, mesh=dp_mesh, reshard_after_forward=True)
             broadcast_dtensor_model_states(self.net_ema, dp_mesh)
             self.net_ema_worker = DTensorFastEmaModelUpdater()
-            # No need to copy weights to EMA when applying FSDP, it is already copied before applying FSDP.
+            # Copy weights from net to net_ema after both are properly initialized
+            self.net_ema_worker.copy_to(src_model=self.net, tgt_model=self.net_ema)
 
     def init_optimizer_scheduler(
         self, optimizer_config: LazyDict, scheduler_config: LazyDict
@@ -360,81 +382,7 @@ class Text2WorldModelRectifiedFlow(ImaginaireModel):
             - The method also supports Kendall's loss
         """
         self._update_train_stats(data_batch)
-
-        # Obtain text embeddings online
-        if self.config.text_encoder_config is not None and self.config.text_encoder_config.compute_online:
-            if self.config.conditioner.text.use_prompt:
-            # text_embeddings = self.text_encoder.compute_text_embeddings_online(data_batch, self.input_caption_key)
-                text_embeddings = self.text_encoder.compute_text_embeddings_online(data_batch, self.input_text_key)
-            else:
-                text_embeddings = self.text_encoder.compute_text_embeddings_online(data_batch, self.input_caption_key)
-            data_batch["t5_text_embeddings"] = text_embeddings
-            data_batch["t5_text_mask"] = torch.ones(text_embeddings.shape[0], text_embeddings.shape[1], device="cuda")
-
-        # Get the input data to noise and denoise~(image, video) and the corresponding conditioner.
-        _, x0_B_C_T_H_W, condition = self.get_data_and_condition(data_batch)
-
-        # Sample pertubation noise levels and N(0, 1) noises
-        epsilon_B_C_T_H_W = torch.randn(x0_B_C_T_H_W.size(), **self.tensor_kwargs_fp32)
-        batch_size = x0_B_C_T_H_W.size()[0]
-        t_B = self.rectified_flow.sample_train_time(batch_size).to(**self.tensor_kwargs_fp32)
-        t_B = rearrange(t_B, "b -> b 1")  # add a dimension for T, all frames share the same sigma
-
-        x0_B_C_T_H_W, condition, epsilon_B_C_T_H_W, t_B = self.broadcast_split_for_model_parallelsim(
-            x0_B_C_T_H_W, condition, epsilon_B_C_T_H_W, t_B
-        )
-        timesteps = self.rectified_flow.get_discrete_timestamp(t_B, self.tensor_kwargs_fp32)
-
-        if self.config.use_high_sigma_strategy:
-            # Use high sigma strategy
-            mask = torch.rand(timesteps.shape, device=timesteps.device) < self.config.high_sigma_ratio
-
-            candidate_timesteps = self.rectified_flow.noise_scheduler.timesteps.to(device=timesteps.device)
-            candidate_timesteps = candidate_timesteps[
-                (candidate_timesteps >= self.config.high_sigma_timesteps_min)
-                & (candidate_timesteps <= self.config.high_sigma_timesteps_max)
-            ]
-
-            if len(candidate_timesteps) > 0:
-                # Sample timesteps.shape values from candidate_timesteps with replacement
-                new_timesteps = candidate_timesteps[torch.randint(0, len(candidate_timesteps), timesteps.shape)]
-                timesteps = torch.where(mask, new_timesteps, timesteps)
-            else:
-                raise ValueError("No candidate timesteps found for high sigma strategy")
-
-        sigmas = self.rectified_flow.get_sigmas(
-            timesteps,
-            self.tensor_kwargs_fp32,
-        )
-
-        timesteps = rearrange(timesteps, "b -> b 1")
-        sigmas = rearrange(sigmas, "b -> b 1")
-        xt_B_C_T_H_W, vt_B_C_T_H_W = self.rectified_flow.get_interpolation(epsilon_B_C_T_H_W, x0_B_C_T_H_W, sigmas)
-
-        vt_pred_B_C_T_H_W = self.denoise(
-            noise=epsilon_B_C_T_H_W,
-            xt_B_C_T_H_W=xt_B_C_T_H_W.to(**self.tensor_kwargs),
-            timesteps_B_T=timesteps,
-            condition=condition,
-        )
-
-
-        time_weights_B = self.rectified_flow.train_time_weight(timesteps, self.tensor_kwargs_fp32)
-        per_instance_loss = torch.mean(
-            (vt_pred_B_C_T_H_W - vt_B_C_T_H_W) ** 2, dim=list(range(1, vt_pred_B_C_T_H_W.dim()))
-        )
-
-        loss = torch.mean(time_weights_B * per_instance_loss)
-        output_batch = {
-            "x0": x0_B_C_T_H_W,
-            "xt": xt_B_C_T_H_W,
-            "sigma": sigmas,
-            "condition": condition,
-            "model_pred": vt_pred_B_C_T_H_W,
-            "edm_loss": loss,
-        }
-
-        return output_batch, loss
+        return self.forward(data_batch)
 
     @staticmethod
     def get_context_parallel_group():
@@ -452,7 +400,7 @@ class Text2WorldModelRectifiedFlow(ImaginaireModel):
         if condition.is_video and cp_size > 1:
             # Perform spatial split only when it's required, i.e. temporal split is not enough.
             # Refer to "find_split" definition for more details.
-            use_spatial_split = cp_size > x0_B_C_T_H_W.shape[2]
+            use_spatial_split = cp_size > x0_B_C_T_H_W.shape[2] or x0_B_C_T_H_W.shape[2] % cp_size != 0
             after_split_shape = find_split(x0_B_C_T_H_W.shape, cp_size) if use_spatial_split else None
             if use_spatial_split:
                 x0_B_C_T_H_W = rearrange(x0_B_C_T_H_W, "B C T H W -> B C (T H W)")
@@ -609,7 +557,8 @@ class Text2WorldModelRectifiedFlow(ImaginaireModel):
             n_views = noise.shape[2] // self.get_num_video_latent_frames()
             # Perform spatial split only when it's required, i.e. temporal split is not enough.
             # Refer to "find_split" definition for more details.
-            use_spatial_split = cp_size > noise.shape[2] // n_views
+            state_t = noise.shape[2] // n_views
+            use_spatial_split = cp_size > state_t or state_t % cp_size != 0
             after_split_shape = None
             if use_spatial_split:
                 after_split_shape = find_split(noise.shape, cp_size, view_factor=n_views)
@@ -718,7 +667,8 @@ class Text2WorldModelRectifiedFlow(ImaginaireModel):
             n_views = noise.shape[2] // self.get_num_video_latent_frames()
             # Perform spatial split only when it's required, i.e. temporal split is not enough.
             # Refer to "find_split" definition for more details.
-            use_spatial_split = cp_size > noise.shape[2] // n_views
+            state_t = noise.shape[2] // n_views
+            use_spatial_split = cp_size > state_t or state_t % cp_size != 0
             after_split_shape = None
             if use_spatial_split:
                 after_split_shape = find_split(noise.shape, cp_size, view_factor=n_views)
@@ -776,113 +726,91 @@ class Text2WorldModelRectifiedFlow(ImaginaireModel):
 
         return latents
 
-    # ------------------------ Sampling ------------------------
-    @torch.no_grad()
-    def generate_samples_from_batch_dmd2(
-        self,
-        data_batch: Dict,
-        guidance: float = 1.5,
-        seed: int = 1,
-        state_shape: Tuple | None = None,
-        n_sample: int | None = None,
-        is_negative_prompt: bool = False,
-        num_steps: int = 35,
-        # solver_option: COMMON_SOLVER_OPTIONS = "2ab",
-        init_noise: torch.Tensor = None,
-        # mid_t: List[float] | None = None,
-        **kwargs,
-    ) -> torch.Tensor:
-        """
-        Generate samples from the batch. Based on given batch, it will automatically determine whether to generate image or video samples.
-        Args:
-            data_batch (dict): raw data batch draw from the training data loader.
-            iteration (int): Current iteration number.
-            guidance (float): guidance weights
-            seed (int): random seed
-            state_shape (tuple): shape of the state, default to data batch if not provided
-            n_sample (int): number of samples to generate
-            is_negative_prompt (bool): use negative prompt t5 in uncondition if true
-            num_steps (int): number of steps for the diffusion process
-            solver_option (str): differential equation solver option, default to "2ab"~(mulitstep solver)
-        """
-        del kwargs
-        self._normalize_video_databatch_inplace(data_batch)
-        self._augment_image_dim_inplace(data_batch)
-        is_image_batch = self.is_image_batch(data_batch)
-        input_key = self.input_image_key if is_image_batch else self.input_data_key
-        if n_sample is None:
-            n_sample = data_batch[input_key].shape[0]
-        if state_shape is None:
-            _T, _H, _W = data_batch[input_key].shape[-3:]
-            state_shape = [
-                self.config.state_ch,
-                self.tokenizer.get_latent_num_frames(_T),
-                _H // self.tokenizer.spatial_compression_factor,
-                _W // self.tokenizer.spatial_compression_factor,
-            ]
-
-        x0_fn = self.get_x0_fn_from_batch(data_batch, guidance)
-
-        generator = torch.Generator(device=self.tensor_kwargs["device"])
-        generator.manual_seed(seed)
-
-        if init_noise is None:
-            init_noise = torch.randn(
-                (n_sample,) + tuple(state_shape),
-                # n_sample,
-                # *state_shape,
-                dtype=torch.float32,
-                device=self.tensor_kwargs["device"],
-                generator=generator,
-            )
-        # log.info(f"init_noise shape: {init_noise} {(n_sample,) + tuple(state_shape)}")
-        use_spatial_split = False
-        if self.net.is_context_parallel_enabled:  # type: ignore
-            cp_size = len(torch.distributed.get_process_group_ranks(self.get_context_parallel_group()))
-            # Perform spatial split only when it's required, i.e. temporal split is not enough.
-            # Refer to "find_split" definition for more details.
-            use_spatial_split = cp_size > init_noise.shape[2]
-            after_split_shape = None
-            if use_spatial_split:
-                n_views = init_noise.shape[2] // self.get_num_video_latent_frames()
-                after_split_shape = find_split(init_noise.shape, cp_size, n_views)
-                after_split_shape = torch.Size([after_split_shape[0] * n_views, *after_split_shape[1:]])
-                init_noise = rearrange(init_noise, "b c t h w -> b c (t h w)")
-
-            init_noise = broadcast_split_tensor(init_noise, seq_dim=2, process_group=self.get_context_parallel_group())
-            if use_spatial_split:
-                init_noise = rearrange(
-                    init_noise, "b c (t h w) -> b c t h w", t=after_split_shape[0], h=after_split_shape[1]
-                )
-
-        # Sampling steps
-        x = init_noise.to(torch.float64)
-        ones = torch.ones(x.size(0), device=x.device, dtype=x.dtype)
-        t_steps = self.config.selected_sampling_time[:num_steps] + [
-            0,
-        ]
-        for t_cur, t_next in zip(t_steps[:-1], t_steps[1:]):
-            x = x0_fn(x.float(), t_cur * ones).to(torch.float64)
-            if t_next > 1e-5:
-                x = math.cos(t_next) * x / self.sigma_data + math.sin(t_next) * init_noise
-        samples = x.float()
-        if self.net.is_context_parallel_enabled:  # type: ignore
-            if use_spatial_split:
-                samples = rearrange(samples, "b c t h w -> b c (t h w)")
-            samples = cat_outputs_cp(samples, seq_dim=2, cp_group=self.get_context_parallel_group())
-            if use_spatial_split:
-                samples = rearrange(samples, "b c (t h w) -> b c t h w", t=state_shape[1], h=state_shape[2])
-        return torch.nan_to_num(samples)
-
     @torch.no_grad()
     def validation_step(
         self, data: dict[str, torch.Tensor], iteration: int
     ) -> tuple[dict[str, torch.Tensor], torch.Tensor]:
-        pass
+        return self.forward(data)
 
-    @torch.no_grad()
-    def forward(self, xt, t, condition: Text2WorldCondition):
-        pass
+    def forward(self, data_batch: dict[str, torch.Tensor]) -> tuple[dict[str, torch.Tensor], torch.Tensor]:
+        # Obtain text embeddings online
+        if self.config.text_encoder_config is not None and self.config.text_encoder_config.compute_online:
+            if self.config.conditioner.text.use_prompt:
+            # text_embeddings = self.text_encoder.compute_text_embeddings_online(data_batch, self.input_caption_key)
+                text_embeddings = self.text_encoder.compute_text_embeddings_online(data_batch, self.input_text_key)
+            else:
+                text_embeddings = self.text_encoder.compute_text_embeddings_online(data_batch, self.input_caption_key)
+            data_batch["t5_text_embeddings"] = text_embeddings
+            data_batch["t5_text_mask"] = torch.ones(text_embeddings.shape[0], text_embeddings.shape[1], device="cuda")
+
+        # Get the input data to noise and denoise~(image, video) and the corresponding conditioner.
+        _, x0_B_C_T_H_W, condition = self.get_data_and_condition(data_batch)
+
+        # Sample pertubation noise levels and N(0, 1) noises
+        epsilon_B_C_T_H_W = torch.randn(x0_B_C_T_H_W.size(), **self.tensor_kwargs_fp32)
+        batch_size = x0_B_C_T_H_W.size()[0]
+        t_B = self.rectified_flow.sample_train_time(batch_size).to(**self.tensor_kwargs_fp32)
+        t_B = rearrange(t_B, "b -> b 1")  # add a dimension for T, all frames share the same sigma
+
+        x0_B_C_T_H_W, condition, epsilon_B_C_T_H_W, t_B = self.broadcast_split_for_model_parallelsim(
+            x0_B_C_T_H_W, condition, epsilon_B_C_T_H_W, t_B
+        )
+        timesteps = self.rectified_flow.get_discrete_timestamp(t_B, self.tensor_kwargs_fp32)
+
+        if self.config.use_high_sigma_strategy:
+            raise NotImplementedError("High sigma strategy is buggy when using CP")
+            # Use high sigma strategy
+            mask = torch.rand(timesteps.shape, device=timesteps.device) < self.config.high_sigma_ratio
+
+            candidate_timesteps = self.rectified_flow.noise_scheduler.timesteps.to(device=timesteps.device)
+            candidate_timesteps = candidate_timesteps[
+                (candidate_timesteps >= self.config.high_sigma_timesteps_min)
+                & (candidate_timesteps <= self.config.high_sigma_timesteps_max)
+            ]
+
+            if len(candidate_timesteps) > 0:
+                # Sample timesteps.shape values from candidate_timesteps with replacement
+                new_timesteps = candidate_timesteps[torch.randint(0, len(candidate_timesteps), timesteps.shape)]
+                timesteps = torch.where(mask, new_timesteps, timesteps)
+            else:
+                raise ValueError("No candidate timesteps found for high sigma strategy")
+
+        sigmas = self.rectified_flow.get_sigmas(
+            timesteps,
+            self.tensor_kwargs_fp32,
+        )
+
+        timesteps = rearrange(timesteps, "b -> b 1")
+        sigmas = rearrange(sigmas, "b -> b 1")
+        xt_B_C_T_H_W, vt_B_C_T_H_W = self.rectified_flow.get_interpolation(epsilon_B_C_T_H_W, x0_B_C_T_H_W, sigmas)
+
+        vt_pred_B_C_T_H_W = self.denoise(
+            noise=epsilon_B_C_T_H_W,
+            xt_B_C_T_H_W=xt_B_C_T_H_W.to(**self.tensor_kwargs),
+            timesteps_B_T=timesteps,
+            condition=condition,
+        )
+
+        time_weights_B = self.rectified_flow.train_time_weight(timesteps, self.tensor_kwargs_fp32)
+        per_instance_loss = torch.mean(
+            (vt_pred_B_C_T_H_W - vt_B_C_T_H_W) ** 2, dim=list(range(1, vt_pred_B_C_T_H_W.dim()))
+        )
+
+        loss = torch.mean(time_weights_B * per_instance_loss)
+        output_batch = {
+            "x0": x0_B_C_T_H_W,
+            "xt": xt_B_C_T_H_W,
+            "sigma": sigmas,
+            "condition": condition,
+            "model_pred": vt_pred_B_C_T_H_W,
+            "edm_loss": loss,
+            # For per-sample loss logging
+            "timesteps": timesteps,
+            "per_instance_loss": per_instance_loss,
+            "n_cond_frames": condition.num_conditional_frames_B,
+        }
+
+        return output_batch, loss
 
     def get_data_and_condition(self, data_batch: dict[str, torch.Tensor]) -> Tuple[Tensor, Tensor, Text2WorldCondition]:
         self._normalize_video_databatch_inplace(data_batch)
@@ -1037,7 +965,7 @@ class Text2WorldModelRectifiedFlow(ImaginaireModel):
         xt_B_C_T_H_W: torch.Tensor,
         timesteps_B_T: torch.Tensor,
         condition: Text2WorldCondition,
-    ) -> DenoisePrediction:
+    ) -> torch.Tensor:
         """
         Performs denoising on the input noise data, noise level, and condition
 

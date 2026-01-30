@@ -17,8 +17,7 @@ from pathlib import Path
 
 import torch
 from cosmos_gradio.deployment_env import DeploymentEnv
-from cosmos_gradio.gradio_app.gradio_app import GradioApp
-from cosmos_gradio.gradio_app.gradio_ui import create_gradio_UI
+from cosmos_gradio.gradio_app.gradio_server import launch_gradio_server
 
 from cosmos_predict2._src.imaginaire.utils import log
 from cosmos_predict2.config import InferenceArguments, SetupArguments
@@ -34,7 +33,25 @@ def create_video2world():
     setup_args = SetupArguments(
         context_parallel_size=global_env.num_gpus,
         output_dir=Path("outputs"),  # dummy parameter, we want to save videos in per inference folders
-        model="2B/pre-trained",
+        model=global_env.model_size,
+        keep_going=True,
+        disable_guardrails=global_env.disable_guardrails,
+    )
+
+    pipeline = Video2World_Worker(setup_args=setup_args)
+    gc.collect()
+    torch.cuda.empty_cache()
+
+    return pipeline
+
+
+def create_distilled():
+    log.info("Creating predict distilled pipeline")
+    global_env = DeploymentEnv()
+    setup_args = SetupArguments(
+        context_parallel_size=global_env.num_gpus,
+        output_dir=Path("outputs"),
+        model="2B/distilled",
         keep_going=True,
         disable_guardrails=global_env.disable_guardrails,
     )
@@ -79,42 +96,32 @@ if __name__ == "__main__":
     # configure server to use the correct worker in the worker procs
     factory_module = {
         "video2world": "cosmos_predict2.gradio.gradio_bootstrapper",
+        "distilled": "cosmos_predict2.gradio.gradio_bootstrapper",
         "multiview": "cosmos_predict2.gradio.gradio_bootstrapper",
     }
 
     factory_function = {
         "video2world": "create_video2world",
+        "distilled": "create_distilled",
         "multiview": "create_multiview",
     }
 
     validators = {
         "video2world": validate_v2w,
+        "distilled": validate_v2w,
         "multiview": validate_multiview,
     }
 
-    app = GradioApp(
-        num_gpus=global_env.num_gpus,
-        validator=validators[global_env.model_name],
+    launch_gradio_server(
         factory_module=factory_module[global_env.model_name],
         factory_function=factory_function[global_env.model_name],
+        validator=validators[global_env.model_name],
+        num_gpus=global_env.num_gpus,
         output_dir=global_env.output_dir,
-    )
-
-    interface = create_gradio_UI(
-        app.infer,
-        header=model_cfg.header[global_env.model_name],
-        default_request=model_cfg.default_request[global_env.model_name],
-        help_text=model_cfg.help_text[global_env.model_name],
         uploads_dir=global_env.uploads_dir,
-        output_dir=global_env.output_dir,
         log_file=global_env.log_file,
-    )
-
-    interface.launch(
-        server_name="0.0.0.0",
-        server_port=8080,
-        share=False,
-        debug=True,
-        max_file_size="500MB",
+        default_request=model_cfg.default_request[global_env.model_name],
+        header=model_cfg.header[global_env.model_name],
+        help_text=model_cfg.help_text[global_env.model_name],
         allowed_paths=global_env.allowed_paths,
     )

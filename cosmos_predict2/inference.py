@@ -34,9 +34,9 @@ class Inference:
 
         self.rank0 = distributed.is_rank0()
         self.setup_args = args
-        self.offload_diffusion_model = args.offload_diffusion_model
-        self.offload_tokenizer = args.offload_tokenizer
-        self.offload_text_encoder = args.offload_text_encoder
+        experiment_opts = []
+        if args.model_key.distilled:
+            experiment_opts.append("model.config.init_student_with_teacher=False")
         self.pipe = Video2WorldInference(
             # pyrefly: ignore  # bad-argument-type
             experiment_name=args.experiment,
@@ -46,6 +46,10 @@ class Inference:
             # pyrefly: ignore  # bad-argument-type
             context_parallel_size=args.context_parallel_size,
             config_file=args.config_file,
+            experiment_opts=experiment_opts,
+            offload_diffusion_model=args.offload_diffusion_model,
+            offload_text_encoder=args.offload_text_encoder,
+            offload_tokenizer=args.offload_tokenizer,
         )
         if self.rank0:
             args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -123,9 +127,6 @@ class Inference:
                 seed=sample.seed,
                 negative_prompt=sample.negative_prompt,
                 num_steps=sample.num_steps,
-                offload_diffusion_model=self.offload_diffusion_model,
-                offload_text_encoder=self.offload_text_encoder,
-                offload_tokenizer=self.offload_tokenizer,
             )
         else:
             log.info(f"Generating video with standard mode...")
@@ -139,9 +140,6 @@ class Inference:
                 seed=sample.seed,
                 negative_prompt=sample.negative_prompt,
                 num_steps=sample.num_steps,
-                offload_diffusion_model=self.offload_diffusion_model,
-                offload_text_encoder=self.offload_text_encoder,
-                offload_tokenizer=self.offload_tokenizer,
             )
 
         if self.rank0:

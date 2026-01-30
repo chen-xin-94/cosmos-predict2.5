@@ -26,6 +26,7 @@ from cosmos_predict2._src.imaginaire.utils.context_parallel import (
     broadcast_split_tensor,
     cat_outputs_cp,
 )
+from cosmos_predict2._src.imaginaire.utils.progress_bar import progress_bar
 from cosmos_predict2._src.predict2.camera.configs.multiview_camera.conditioner import CameraConditionedCondition
 from cosmos_predict2._src.predict2.conditioner import DataType
 from cosmos_predict2._src.predict2.models.video2world_model_rectified_flow import (
@@ -76,10 +77,12 @@ class CameraConditionedFrameinitVideo2WorldModelRectifiedFlow(Video2WorldModelRe
             dim=2,
         )
 
-        # Condition
-        camera_list = torch.chunk(data_batch["camera"], len(latent_state_cond_list) + len(latent_state_src_list), dim=1)
-        camera = torch.cat((camera_list[1], camera_list[0], camera_list[2]), dim=1)
-        data_batch["camera"] = camera
+        # Condition: reorder camera parameters; Plücker rays are computed in the conditioner
+        chunk_size = len(latent_state_cond_list) + len(latent_state_src_list)
+        extr_list = torch.chunk(data_batch["extrinsics"], chunk_size, dim=1)
+        intr_list = torch.chunk(data_batch["intrinsics"], chunk_size, dim=1)
+        data_batch["extrinsics"] = torch.cat((extr_list[1], extr_list[0], extr_list[2]), dim=1)
+        data_batch["intrinsics"] = torch.cat((intr_list[1], intr_list[0], intr_list[2]), dim=1)
 
         condition = self.conditioner(data_batch)
         condition = condition.edit_data_type(DataType.IMAGE if is_image_batch else DataType.VIDEO)
@@ -150,9 +153,10 @@ class CameraConditionedFrameinitVideo2WorldModelRectifiedFlow(Video2WorldModelRe
         else:
             num_conditional_frames = 1
 
-        camera_list = torch.chunk(data_batch["camera"], num_output_video, dim=1)
-        camera = torch.cat((camera_list[1], camera_list[0], camera_list[2]), dim=1)
-        data_batch["camera"] = camera
+        extr_list = torch.chunk(data_batch["extrinsics"], num_output_video, dim=1)
+        intr_list = torch.chunk(data_batch["intrinsics"], num_output_video, dim=1)
+        data_batch["extrinsics"] = torch.cat((extr_list[1], extr_list[0], extr_list[2]), dim=1)
+        data_batch["intrinsics"] = torch.cat((intr_list[1], intr_list[0], intr_list[2]), dim=1)
 
         if is_negative_prompt:
             condition, uncondition = self.conditioner.get_condition_with_negative_prompt(data_batch)
@@ -259,7 +263,7 @@ class CameraConditionedFrameinitVideo2WorldModelRectifiedFlow(Video2WorldModelRe
             noise = broadcast_split_tensor(tensor=noise, seq_dim=2, process_group=self.get_context_parallel_group())
         latents = noise
 
-        for _, t in enumerate(timesteps):
+        for _, t in enumerate(progress_bar(timesteps, desc="Generating samples")):
             latent_model_input = latents
             timestep = [t]
 

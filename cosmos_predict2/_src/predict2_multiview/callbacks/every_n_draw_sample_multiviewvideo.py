@@ -55,7 +55,7 @@ except Exception as e:  # ImportError cannot catch all problems
 
 CONTROL_WEIGHT_KEY = "control_weight"
 
-
+# view index order for visualization of 7-view autonomous driving dataset
 camera_to_view_id = {
     "camera_cross_left_120fov": 5,
     "camera_cross_right_120fov": 1,
@@ -392,26 +392,23 @@ class EveryNDrawSampleMultiviewVideo(EveryNDrawSample):
                 (B, C, T, H, V * W)
             """
             current_view_index_order = [i.item() for i in data_batch["view_indices_selection"][0]]
-            
-            # Only attempt reordering if we have a full set of 7 views matching the expected order
-            # For arbitrary view counts, use the current order as-is
-            if len(current_view_index_order) == len(visualization_view_index_order):
-                expected_view_index_order = visualization_view_index_order
-                
-                # Reorder views to match expected visualization order
-                if current_view_index_order != expected_view_index_order:
-                    # Create mapping from current order to expected order
-                    reorder_indices = []
-                    for expected_view in expected_view_index_order:
-                        if expected_view in current_view_index_order:
-                            reorder_indices.append(current_view_index_order.index(expected_view))
-                    
-                    # Only reorder if we found all expected views
-                    if len(reorder_indices) == len(expected_view_index_order):
-                        # Reshape to separate view and time dimensions
-                        B, C, VT, H, W = mv_video.shape
-                        T = VT // n_views
-                        mv_video = rearrange(mv_video, "B C (V T) H W -> B C V T H W", V=n_views)
+            expected_view_index_order = visualization_view_index_order
+
+            # Reorder views to match expected visualization order
+            if (
+                len(current_view_index_order) == len(expected_view_index_order)
+                and current_view_index_order != expected_view_index_order
+            ):
+                # Create mapping from current order to expected order
+                reorder_indices = []
+                for expected_view in expected_view_index_order:
+                    if expected_view in current_view_index_order:
+                        reorder_indices.append(current_view_index_order.index(expected_view))
+
+                # Reshape to separate view and time dimensions
+                B, C, VT, H, W = mv_video.shape
+                T = VT // n_views
+                mv_video = rearrange(mv_video, "B C (V T) H W -> B C V T H W", V=n_views)
 
                         # Reorder views according to expected order
                         mv_video = mv_video[:, :, reorder_indices, :, :, :]
@@ -480,8 +477,6 @@ class EveryNDrawSampleMultiviewVideo(EveryNDrawSample):
                         log.info(f"hint: {hint.shape}")
                         to_show.append(hint.float().cpu())
 
-
-        # Apply time_to_width_dimension transformation for all view counts
         to_show = [time_to_width_dimension(t) for t in to_show]
 
         base_fp_wo_ext = f"{tag}_ReplicateID{self.data_parallel_id:04d}_Sample_Iter{iteration:09d}_{n_views}views"
