@@ -35,18 +35,27 @@ except ImportError:
     register_gr00t_customized_gr1_data = None
 
 # bridge dataset path
-base_path = "datasets/df/avla_nov_8_merged_per_embodiment_2025-11-12/fr3_single_arm_franka_hand"
+bridge_base_path = "datasets/opensource_robotdata/bridge"
+bridge_train_annotation_path = os.path.join(bridge_base_path, "annotation/train")
+bridge_val_annotation_path = os.path.join(bridge_base_path, "annotation/val")
+bridge_test_annotation_path = os.path.join(bridge_base_path, "annotation/test")
 
-train_annotation_path = os.path.join(base_path, "annotation/train")
-val_annotation_path = os.path.join(base_path, "annotation/val")
-test_annotation_path = os.path.join(base_path, "annotation/test")
+
+# df dataset path
+df_base_path = "datasets/df/avla_nov_8_merged_per_embodiment_2025-11-12/fr3_single_arm_franka_hand"
+df_train_annotation_path = os.path.join(df_base_path, "annotation/train")
+df_val_annotation_path = os.path.join(df_base_path, "annotation/val")
+df_test_annotation_path = os.path.join(df_base_path, "annotation/test")
+
+# agibot annotation path - will traverse all task subdirectories
+agibot_base_annotation_path = "datasets/agibot/annotation"
 
 # experiment for next-frame prediction
 bridge_train_dataset = L(Dataset_3D)(
-    train_annotation_path=train_annotation_path,
-    val_annotation_path=val_annotation_path,
-    test_annotation_path=test_annotation_path,
-    video_path=base_path,
+    train_annotation_path=bridge_train_annotation_path,
+    val_annotation_path=bridge_val_annotation_path,
+    test_annotation_path=bridge_test_annotation_path,
+    video_path=bridge_base_path,
     fps_downsample_ratio=1,
     num_action_per_chunk=1,
     cam_ids=[0],
@@ -56,10 +65,10 @@ bridge_train_dataset = L(Dataset_3D)(
     mode="train",
 )
 bridge_val_dataset = L(Dataset_3D)(
-    train_annotation_path=train_annotation_path,
-    val_annotation_path=val_annotation_path,
-    test_annotation_path=test_annotation_path,
-    video_path=base_path,
+    train_annotation_path=bridge_train_annotation_path,
+    val_annotation_path=bridge_val_annotation_path,
+    test_annotation_path=bridge_test_annotation_path,
+    video_path=bridge_base_path,
     fps_downsample_ratio=1,
     num_action_per_chunk=1,
     cam_ids=[0],
@@ -71,10 +80,10 @@ bridge_val_dataset = L(Dataset_3D)(
 
 # experiment for action-sequence video prediction
 bridge_13frame_480_640_train_dataset = L(Dataset_3D)(
-    train_annotation_path=train_annotation_path,
-    val_annotation_path=val_annotation_path,
-    test_annotation_path=test_annotation_path,
-    video_path=base_path,
+    train_annotation_path=bridge_train_annotation_path,
+    val_annotation_path=bridge_val_annotation_path,
+    test_annotation_path=bridge_test_annotation_path,
+    video_path=bridge_base_path,
     fps_downsample_ratio=1,
     num_action_per_chunk=12,
     cam_ids=[0],
@@ -84,10 +93,10 @@ bridge_13frame_480_640_train_dataset = L(Dataset_3D)(
     mode="train",
 )
 bridge_13frame_480_640_val_dataset = L(Dataset_3D)(
-    train_annotation_path=train_annotation_path,
-    val_annotation_path=val_annotation_path,
-    test_annotation_path=test_annotation_path,
-    video_path=base_path,
+    train_annotation_path=bridge_train_annotation_path,
+    val_annotation_path=bridge_val_annotation_path,
+    test_annotation_path=bridge_test_annotation_path,
+    video_path=bridge_base_path,
     fps_downsample_ratio=1,
     num_action_per_chunk=12,
     cam_ids=[0],
@@ -97,12 +106,12 @@ bridge_13frame_480_640_val_dataset = L(Dataset_3D)(
     mode="val",
 )
 
-################### AVLA Dataset ###################
+################### DF Dataset ###################
 avla_franka_single_arm_train_dataset = L(Dataset_3D_DF)(
-    train_annotation_path=train_annotation_path,
-    val_annotation_path=val_annotation_path,
-    test_annotation_path=test_annotation_path,
-    video_path=base_path,
+    train_annotation_path=df_train_annotation_path,
+    val_annotation_path=df_val_annotation_path,
+    test_annotation_path=df_test_annotation_path,
+    video_path=df_base_path,
     fps_downsample_ratio=1,
     num_action_per_chunk=1,
     cam_ids=[0],
@@ -112,10 +121,10 @@ avla_franka_single_arm_train_dataset = L(Dataset_3D_DF)(
     mode="train",
 )
 avla_franka_single_arm_val_dataset = L(Dataset_3D_DF)(
-    train_annotation_path=train_annotation_path,
-    val_annotation_path=val_annotation_path,
-    test_annotation_path=test_annotation_path,
-    video_path=base_path,
+    train_annotation_path=df_train_annotation_path,
+    val_annotation_path=df_val_annotation_path,
+    test_annotation_path=df_test_annotation_path,
+    video_path=df_base_path,
     fps_downsample_ratio=1,
     num_action_per_chunk=1,
     cam_ids=[0],
@@ -127,10 +136,10 @@ avla_franka_single_arm_val_dataset = L(Dataset_3D_DF)(
 
 # experiment for action-sequence video prediction
 avla_franka_single_arm_13frame_480_640_train_dataset = L(Dataset_3D_DF)(
-    train_annotation_path=train_annotation_path,
-    val_annotation_path=val_annotation_path,
-    test_annotation_path=test_annotation_path,
-    video_path=base_path,
+    train_annotation_path=df_train_annotation_path,
+    val_annotation_path=df_val_annotation_path,
+    test_annotation_path=df_test_annotation_path,
+    video_path=df_base_path,
     fps_downsample_ratio=1,
     num_action_per_chunk=12,
     cam_ids=[0],
@@ -140,10 +149,10 @@ avla_franka_single_arm_13frame_480_640_train_dataset = L(Dataset_3D_DF)(
     mode="train",
 )
 avla_franka_single_arm_13frame_480_640_val_dataset = L(Dataset_3D_DF)(
-    train_annotation_path=train_annotation_path,
-    val_annotation_path=val_annotation_path,
-    test_annotation_path=test_annotation_path,
-    video_path=base_path,
+    train_annotation_path=df_train_annotation_path,
+    val_annotation_path=df_val_annotation_path,
+    test_annotation_path=df_test_annotation_path,
+    video_path=df_base_path,
     fps_downsample_ratio=1,
     num_action_per_chunk=12,
     cam_ids=[0],
@@ -213,7 +222,7 @@ bridge_13frame_480_640_val_dataloader = L(DataLoader)(
     drop_last=True,
 )
 
-################### AVLA Dataloader ###################
+################### DF Dataloader ###################
 avla_franka_single_arm_train_dataloader = L(DataLoader)(
     dataset=avla_franka_single_arm_train_dataset,
     sampler=L(get_sampler)(dataset=bridge_train_dataset),
@@ -242,16 +251,16 @@ avla_franka_single_arm_13frame_480_640_val_dataloader = L(DataLoader)(
 ################################################
 
 
-################### Multi-View AVLA Dataset (3 views, width-concatenated) ###################
+################### Multi-View DF Dataset (3 views, width-concatenated) ###################
 # Import the multi-view dataset class
 from cosmos_predict2._src.predict2.action.datasets.dataset_df import ActionConditionedMultiViewDataset_DF
 
 # Multi-view 3-camera dataset: 448x1344 (3x448 width)
 avla_franka_multiview_13frame_448_1344_train_dataset = L(ActionConditionedMultiViewDataset_DF)(
-    train_annotation_path=train_annotation_path,
-    val_annotation_path=val_annotation_path,
-    test_annotation_path=test_annotation_path,
-    video_path=base_path,
+    train_annotation_path=df_train_annotation_path,
+    val_annotation_path=df_val_annotation_path,
+    test_annotation_path=df_test_annotation_path,
+    video_path=df_base_path,
     fps_downsample_ratio=1,
     num_action_per_chunk=12,
     cam_ids=[0, 1, 2],  # All 3 cameras: left, top, wrist
@@ -261,10 +270,10 @@ avla_franka_multiview_13frame_448_1344_train_dataset = L(ActionConditionedMultiV
     mode="train",
 )
 avla_franka_multiview_13frame_448_1344_val_dataset = L(ActionConditionedMultiViewDataset_DF)(
-    train_annotation_path=train_annotation_path,
-    val_annotation_path=val_annotation_path,
-    test_annotation_path=test_annotation_path,
-    video_path=base_path,
+    train_annotation_path=df_train_annotation_path,
+    val_annotation_path=df_val_annotation_path,
+    test_annotation_path=df_test_annotation_path,
+    video_path=df_base_path,
     fps_downsample_ratio=1,
     num_action_per_chunk=12,
     cam_ids=[0, 1, 2],  # All 3 cameras: left, top, wrist
@@ -294,8 +303,6 @@ avla_franka_multiview_13frame_448_1344_val_dataloader = L(DataLoader)(
 
 
 ################### AgiBotWorld Multi-View Dataset (3 views, width-concatenated to 480x1920) ###################
-# Base annotation path - will traverse all task subdirectories
-agibot_base_annotation_path = "datasets/agibot/annotation"
 
 # Multi-view 3-camera dataset: 480x1920 (3x640 width)
 agibot_multiview_13frame_480_1920_train_dataset = L(ActionConditionedMultiViewDataset_AGIBOT)(
