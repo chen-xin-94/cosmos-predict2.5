@@ -1,6 +1,6 @@
 # Note 02.12.2025
 
-Data preprocessing scripts are under `avla_data_preprocessing/`
+Data preprocessing scripts are under `df_data_preprocessing/`
 
 Training annotations (json files) are stored under `datasets/df/avla_nov_8_merged_per_embodiment_2025-11-12/fr3_single_arm_franka_hand/annotation/`
 The full episodes are recorded. During training, set `fps_downsample_ratio=6` to simulate training with `FPS=5` for consistency with bridge dataset.
@@ -47,7 +47,7 @@ With this setting, the checkpoint will be saved under `imaginaire-output`
 ### 4.1 Converting DCP checkpoint to consolidated PyTorch format
 After the checkpoint is saved, it need to be converted to PyTorch format (`scripts/convert_checkpoints.sh`):
 ```
-CHECKPOINTS_DIR=${IMAGINAIRE_OUTPUT_ROOT:-/tmp/imaginaire4-output}/cosmos_predict2_action_conditioned/cosmos_predict_v2p5/2b_avla_action_w_text_conditioned_10k_bs4/checkpoints
+CHECKPOINTS_DIR=${IMAGINAIRE_OUTPUT_ROOT:-/tmp/imaginaire4-output}/cosmos_predict2_action_conditioned/cosmos_predict_v2p5/2b_df_action_w_text_conditioned_10k_bs4/checkpoints
 CHECKPOINT_ITER=$(cat $CHECKPOINTS_DIR/latest_checkpoint.txt)
 CHECKPOINT_DIR=$CHECKPOINTS_DIR/$CHECKPOINT_ITER
 
@@ -64,40 +64,12 @@ export CUDA_VISIBLE_DEVICES=0
 
 python examples/action_conditioned.py \
 -i assets/action_conditioned/basic/df/inference_params.json \
--o outputs/action_conditioned/avla_franka_single_arm_bf16_w_new_text_12.5k_novel_image2 \
+-o outputs/action_conditioned/df_franka_single_arm_bf16_w_new_text_12.5k_novel_image2 \
 --experiment ac_reason_embeddings_rectified_flow_2b_256_320_df \
 --checkpoint-path $CHECKPOINT_DIR/model_ema_bf16.pt \
 ```
 
 `inference_params.json` includes all inference setting and hyperparameters:
-```
-{
-  "name": "avla_franka_single_arm_bf16_w_text_12.5k_debug",
-  "input_root": "datasets/df/avla_nov_8_merged_per_embodiment_2025-11-12/fr3_single_arm_franka_hand",
-  "input_json_sub_folder": "annotation/test",
-  "save_root": "outputs/action_conditioned/avla_franka_single_arm_bf16_w_text_12.5k_debug",
-  "guidance": 0,
-  "resolution": "256,320",
-  "camera_id": 0,
-  "start": 0,
-  "end": 10,
-  "fps_downsample_ratio": 6,
-  "gripper_scale": 1.0,
-  "gripper_key": "continuous_gripper_state",
-  "state_key": "state",
-  "reverse": false,
-  "single_chunk": false,
-  "start_frame_idx": 0,
-  "save_fps": 20,
-  "num_latent_conditional_frames": 1,
-  "action_scaler": 20.0,
-  "use_quat": false,
-  "action_load_fn": "cosmos_predict2.action_conditioned.load_default_action_fn",
-  "negative_prompt": "The video captures a series of frames showing ugly scenes, static with no motion, motion blur, over-saturation, shaky footage, low resolution, grainy texture, pixelated images, poorly lit areas, underexposed and overexposed scenes, poor color balance, washed out colors, choppy sequences, jerky movements, low frame rate, artifacting, color banding, unnatural transitions, outdated special effects, fake elements, unconvincing visuals, poorly edited content, jump cuts, visual noise, and flickering. Overall, the video is of poor quality.",
-  "seed": 42,
-  "prompt": null,
-  "use_text": true
-}
 
 ```
 

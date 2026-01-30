@@ -43,7 +43,6 @@ from cosmos_predict2._src.imaginaire.utils.dataset_utils import (
     Resize_Preprocess,
     ToTensorVideo,
     euler2rotm,
-    quat2rotm,
     rotm2euler,
 )
 

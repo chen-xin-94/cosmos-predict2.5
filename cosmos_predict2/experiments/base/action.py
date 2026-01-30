@@ -134,12 +134,12 @@ ac_reason_embeddings_rectified_flow_2b_256_320_df = LazyDict(
     dict(
         defaults=[
             "ac_reason_embeddings_rectified_flow_2b_256_320",  # inherit
-            {"override /data_train": "avla_franka_single_arm_13frame_480_640_train"},
-            {"override /data_val": "avla_franka_single_arm_13frame_480_640_val"},
+            {"override /data_train": "df_franka_single_arm_13frame_480_640_train"},
+            {"override /data_val": "df_franka_single_arm_13frame_480_640_val"},
             "_self_",
         ],
         job=dict(
-            name="2b_avla_action_wo_text_conditioned_10k_bs4_debugging",
+            name="2b_df_action_wo_text_conditioned_10k_bs4_debugging",
         ),
         trainer=dict(
             max_iter=1_000,
@@ -176,14 +176,14 @@ ac_reason_embeddings_rectified_flow_2b_multiview_448_1344 = LazyDict(
             {"override /model": "action_conditioned_video2world_fsdp_rectified_flow"},
             {"override /net": "cosmos_v1_2B_action_conditioned"},
             {"override /conditioner": "action_conditioned_video_conditioner"},
-            {"override /data_train": "avla_franka_multiview_13frame_448_1344_train"},
-            {"override /data_val": "avla_franka_multiview_13frame_448_1344_val"},
+            {"override /data_train": "df_franka_multiview_13frame_448_1344_train"},
+            {"override /data_val": "df_franka_multiview_13frame_448_1344_val"},
             "_self_",
         ],
         job=dict(
             project="cosmos_predict2_action_conditioned",
             group="cosmos_predict_v2p5",
-            name=f"2b_avla_multiview_action_conditioned_448_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            name=f"2b_df_multiview_action_conditioned_448_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
             wandb_mode="online",
         ),
         optimizer=dict(
@@ -321,12 +321,12 @@ ac_reason_embeddings_rectified_flow_2b_multiview_448_1344_smoke = LazyDict(
     dict(
         defaults=[
             "ac_reason_embeddings_rectified_flow_2b_multiview_448_1344",  # Inherit from the full experiment
-            {"override /data_train": "avla_franka_multiview_13frame_448_1344_smoke_train"},
-            {"override /data_val": "avla_franka_multiview_13frame_448_1344_smoke_val"},
+            {"override /data_train": "df_franka_multiview_13frame_448_1344_smoke_train"},
+            {"override /data_val": "df_franka_multiview_13frame_448_1344_smoke_val"},
             "_self_",
         ],
         job=dict(
-            name=f"2b_avla_multiview_action_conditioned_448_smoke_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            name=f"2b_df_multiview_action_conditioned_448_smoke_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
             wandb_mode="disabled",
         ),
         trainer=dict(

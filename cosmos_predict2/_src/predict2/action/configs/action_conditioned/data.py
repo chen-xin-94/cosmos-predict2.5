@@ -20,12 +20,11 @@ from megatron.core import parallel_state
 from torch.utils.data import DataLoader, DistributedSampler
 
 from cosmos_predict2._src.imaginaire.lazy_config import LazyCall as L
-from cosmos_predict2._src.predict2.action.datasets.dataset_local import Dataset_3D
-from cosmos_predict2._src.predict2.action.datasets.dataset_df import Dataset_3D_DF
 from cosmos_predict2._src.predict2.action.datasets.dataset_agibot import (
-    Dataset_3D_AGIBOT,
     ActionConditionedMultiViewDataset_AGIBOT,
 )
+from cosmos_predict2._src.predict2.action.datasets.dataset_df import Dataset_3D_DF
+from cosmos_predict2._src.predict2.action.datasets.dataset_local import Dataset_3D
 
 try:
     from cosmos_predict2._src.predict2.action.configs.action_conditioned.experiment.gr00t_customized_gr1 import (
@@ -116,7 +115,7 @@ bridge_13frame_480_640_val_dataset = L(Dataset_3D)(
 )
 
 ################### DF Dataset ###################
-avla_franka_single_arm_train_dataset = L(Dataset_3D_DF)(
+df_franka_single_arm_train_dataset = L(Dataset_3D_DF)(
     train_annotation_path=df_train_annotation_path,
     val_annotation_path=df_val_annotation_path,
     test_annotation_path=df_test_annotation_path,
@@ -129,7 +128,7 @@ avla_franka_single_arm_train_dataset = L(Dataset_3D_DF)(
     val_start_frame_interval=1,
     mode="train",
 )
-avla_franka_single_arm_val_dataset = L(Dataset_3D_DF)(
+df_franka_single_arm_val_dataset = L(Dataset_3D_DF)(
     train_annotation_path=df_train_annotation_path,
     val_annotation_path=df_val_annotation_path,
     test_annotation_path=df_test_annotation_path,
@@ -144,7 +143,7 @@ avla_franka_single_arm_val_dataset = L(Dataset_3D_DF)(
 )
 
 # experiment for action-sequence video prediction
-avla_franka_single_arm_13frame_480_640_train_dataset = L(Dataset_3D_DF)(
+df_franka_single_arm_13frame_480_640_train_dataset = L(Dataset_3D_DF)(
     train_annotation_path=df_train_annotation_path,
     val_annotation_path=df_val_annotation_path,
     test_annotation_path=df_test_annotation_path,
@@ -157,7 +156,7 @@ avla_franka_single_arm_13frame_480_640_train_dataset = L(Dataset_3D_DF)(
     val_start_frame_interval=1,
     mode="train",
 )
-avla_franka_single_arm_13frame_480_640_val_dataset = L(Dataset_3D_DF)(
+df_franka_single_arm_13frame_480_640_val_dataset = L(Dataset_3D_DF)(
     train_annotation_path=df_train_annotation_path,
     val_annotation_path=df_val_annotation_path,
     test_annotation_path=df_test_annotation_path,
@@ -232,28 +231,28 @@ bridge_13frame_480_640_val_dataloader = L(DataLoader)(
 )
 
 ################### DF Dataloader ###################
-avla_franka_single_arm_train_dataloader = L(DataLoader)(
-    dataset=avla_franka_single_arm_train_dataset,
+df_franka_single_arm_train_dataloader = L(DataLoader)(
+    dataset=df_franka_single_arm_train_dataset,
     sampler=L(get_sampler)(dataset=bridge_train_dataset),
     batch_size=1,
     drop_last=True,
 )
-avla_franka_single_arm_val_dataloader = L(DataLoader)(
-    dataset=avla_franka_single_arm_val_dataset,
+df_franka_single_arm_val_dataloader = L(DataLoader)(
+    dataset=df_franka_single_arm_val_dataset,
     sampler=L(get_sampler)(dataset=bridge_val_dataset),
     batch_size=1,
     drop_last=True,
 )
 
-avla_franka_single_arm_13frame_480_640_train_dataloader = L(DataLoader)(
-    dataset=avla_franka_single_arm_13frame_480_640_train_dataset,
-    sampler=L(get_sampler)(dataset=avla_franka_single_arm_13frame_480_640_train_dataset),
+df_franka_single_arm_13frame_480_640_train_dataloader = L(DataLoader)(
+    dataset=df_franka_single_arm_13frame_480_640_train_dataset,
+    sampler=L(get_sampler)(dataset=df_franka_single_arm_13frame_480_640_train_dataset),
     batch_size=1,
     drop_last=True,
 )
-avla_franka_single_arm_13frame_480_640_val_dataloader = L(DataLoader)(
-    dataset=avla_franka_single_arm_13frame_480_640_val_dataset,
-    sampler=L(get_sampler)(dataset=avla_franka_single_arm_13frame_480_640_val_dataset),
+df_franka_single_arm_13frame_480_640_val_dataloader = L(DataLoader)(
+    dataset=df_franka_single_arm_13frame_480_640_val_dataset,
+    sampler=L(get_sampler)(dataset=df_franka_single_arm_13frame_480_640_val_dataset),
     batch_size=1,
     drop_last=True,
 )
@@ -265,7 +264,7 @@ avla_franka_single_arm_13frame_480_640_val_dataloader = L(DataLoader)(
 from cosmos_predict2._src.predict2.action.datasets.dataset_df import ActionConditionedMultiViewDataset_DF
 
 # Multi-view 3-camera dataset: 448x1344 (3x448 width)
-avla_franka_multiview_13frame_448_1344_train_dataset = L(ActionConditionedMultiViewDataset_DF)(
+df_franka_multiview_13frame_448_1344_train_dataset = L(ActionConditionedMultiViewDataset_DF)(
     train_annotation_path=df_train_annotation_path,
     val_annotation_path=df_val_annotation_path,
     test_annotation_path=df_test_annotation_path,
@@ -278,7 +277,7 @@ avla_franka_multiview_13frame_448_1344_train_dataset = L(ActionConditionedMultiV
     val_start_frame_interval=1,
     mode="train",
 )
-avla_franka_multiview_13frame_448_1344_val_dataset = L(ActionConditionedMultiViewDataset_DF)(
+df_franka_multiview_13frame_448_1344_val_dataset = L(ActionConditionedMultiViewDataset_DF)(
     train_annotation_path=df_train_annotation_path,
     val_annotation_path=df_val_annotation_path,
     test_annotation_path=df_test_annotation_path,
@@ -292,17 +291,17 @@ avla_franka_multiview_13frame_448_1344_val_dataset = L(ActionConditionedMultiVie
     mode="val",
 )
 
-avla_franka_multiview_13frame_448_1344_train_dataloader = L(DataLoader)(
-    dataset=avla_franka_multiview_13frame_448_1344_train_dataset,
-    sampler=L(get_sampler)(dataset=avla_franka_multiview_13frame_448_1344_train_dataset),
+df_franka_multiview_13frame_448_1344_train_dataloader = L(DataLoader)(
+    dataset=df_franka_multiview_13frame_448_1344_train_dataset,
+    sampler=L(get_sampler)(dataset=df_franka_multiview_13frame_448_1344_train_dataset),
     batch_size=1,
     drop_last=True,
     num_workers=4,
     pin_memory=True,
 )
-avla_franka_multiview_13frame_448_1344_val_dataloader = L(DataLoader)(
-    dataset=avla_franka_multiview_13frame_448_1344_val_dataset,
-    sampler=L(get_sampler)(dataset=avla_franka_multiview_13frame_448_1344_val_dataset),
+df_franka_multiview_13frame_448_1344_val_dataloader = L(DataLoader)(
+    dataset=df_franka_multiview_13frame_448_1344_val_dataset,
+    sampler=L(get_sampler)(dataset=df_franka_multiview_13frame_448_1344_val_dataset),
     batch_size=1,
     drop_last=True,
     num_workers=4,
@@ -359,7 +358,7 @@ agibot_multiview_13frame_480_1920_val_dataloader = L(DataLoader)(
 ################### Smoke Test Multi-View DF Dataset (3 views, width-concatenated) ###################
 
 # Smoke test multi-view 3-camera dataset: 448x1344 (3x448 width)
-avla_franka_multiview_13frame_448_1344_smoke_train_dataset = L(ActionConditionedMultiViewDataset_DF)(
+df_franka_multiview_13frame_448_1344_smoke_train_dataset = L(ActionConditionedMultiViewDataset_DF)(
     train_annotation_path=df_smoke_train_annotation_path,
     val_annotation_path=df_smoke_val_annotation_path,
     test_annotation_path=df_smoke_test_annotation_path,
@@ -372,7 +371,7 @@ avla_franka_multiview_13frame_448_1344_smoke_train_dataset = L(ActionConditioned
     val_start_frame_interval=1,
     mode="train",
 )
-avla_franka_multiview_13frame_448_1344_smoke_val_dataset = L(ActionConditionedMultiViewDataset_DF)(
+df_franka_multiview_13frame_448_1344_smoke_val_dataset = L(ActionConditionedMultiViewDataset_DF)(
     train_annotation_path=df_smoke_train_annotation_path,
     val_annotation_path=df_smoke_val_annotation_path,
     test_annotation_path=df_smoke_test_annotation_path,
@@ -386,17 +385,17 @@ avla_franka_multiview_13frame_448_1344_smoke_val_dataset = L(ActionConditionedMu
     mode="val",
 )
 
-avla_franka_multiview_13frame_448_1344_smoke_train_dataloader = L(DataLoader)(
-    dataset=avla_franka_multiview_13frame_448_1344_smoke_train_dataset,
-    sampler=L(get_sampler)(dataset=avla_franka_multiview_13frame_448_1344_smoke_train_dataset),
+df_franka_multiview_13frame_448_1344_smoke_train_dataloader = L(DataLoader)(
+    dataset=df_franka_multiview_13frame_448_1344_smoke_train_dataset,
+    sampler=L(get_sampler)(dataset=df_franka_multiview_13frame_448_1344_smoke_train_dataset),
     batch_size=1,
     drop_last=True,
     num_workers=4,
     pin_memory=True,
 )
-avla_franka_multiview_13frame_448_1344_smoke_val_dataloader = L(DataLoader)(
-    dataset=avla_franka_multiview_13frame_448_1344_smoke_val_dataset,
-    sampler=L(get_sampler)(dataset=avla_franka_multiview_13frame_448_1344_smoke_val_dataset),
+df_franka_multiview_13frame_448_1344_smoke_val_dataloader = L(DataLoader)(
+    dataset=df_franka_multiview_13frame_448_1344_smoke_val_dataset,
+    sampler=L(get_sampler)(dataset=df_franka_multiview_13frame_448_1344_smoke_val_dataset),
     batch_size=1,
     drop_last=True,
     num_workers=4,
@@ -471,42 +470,42 @@ def register_training_and_val_data():
     cs.store(
         group="data_train",
         package="dataloader_train",
-        name="avla_franka_single_arm_train",
-        node=avla_franka_single_arm_train_dataloader,
+        name="df_franka_single_arm_train",
+        node=df_franka_single_arm_train_dataloader,
     )
     cs.store(
         group="data_val",
         package="dataloader_val",
-        name="avla_franka_single_arm_val",
-        node=avla_franka_single_arm_val_dataloader,
+        name="df_franka_single_arm_val",
+        node=df_franka_single_arm_val_dataloader,
     )
 
     # 13 frame 480 640
     cs.store(
         group="data_train",
         package="dataloader_train",
-        name="avla_franka_single_arm_13frame_480_640_train",
-        node=avla_franka_single_arm_13frame_480_640_train_dataloader,
+        name="df_franka_single_arm_13frame_480_640_train",
+        node=df_franka_single_arm_13frame_480_640_train_dataloader,
     )
     cs.store(
         group="data_val",
         package="dataloader_val",
-        name="avla_franka_single_arm_13frame_480_640_val",
-        node=avla_franka_single_arm_13frame_480_640_val_dataloader,
+        name="df_franka_single_arm_13frame_480_640_val",
+        node=df_franka_single_arm_13frame_480_640_val_dataloader,
     )
 
     # Multi-view 3-camera 13 frame 448x1344
     cs.store(
         group="data_train",
         package="dataloader_train",
-        name="avla_franka_multiview_13frame_448_1344_train",
-        node=avla_franka_multiview_13frame_448_1344_train_dataloader,
+        name="df_franka_multiview_13frame_448_1344_train",
+        node=df_franka_multiview_13frame_448_1344_train_dataloader,
     )
     cs.store(
         group="data_val",
         package="dataloader_val",
-        name="avla_franka_multiview_13frame_448_1344_val",
-        node=avla_franka_multiview_13frame_448_1344_val_dataloader,
+        name="df_franka_multiview_13frame_448_1344_val",
+        node=df_franka_multiview_13frame_448_1344_val_dataloader,
     )
 
     # AgiBotWorld Multi-view 3-camera 13 frame 480x1920
@@ -527,14 +526,14 @@ def register_training_and_val_data():
     cs.store(
         group="data_train",
         package="dataloader_train",
-        name="avla_franka_multiview_13frame_448_1344_smoke_train",
-        node=avla_franka_multiview_13frame_448_1344_smoke_train_dataloader,
+        name="df_franka_multiview_13frame_448_1344_smoke_train",
+        node=df_franka_multiview_13frame_448_1344_smoke_train_dataloader,
     )
     cs.store(
         group="data_val",
         package="dataloader_val",
-        name="avla_franka_multiview_13frame_448_1344_smoke_val",
-        node=avla_franka_multiview_13frame_448_1344_smoke_val_dataloader,
+        name="df_franka_multiview_13frame_448_1344_smoke_val",
+        node=df_franka_multiview_13frame_448_1344_smoke_val_dataloader,
     )
 
     # Smoke Test AgiBotWorld Multi-view 3-camera 13 frame 480x1920

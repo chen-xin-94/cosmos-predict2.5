@@ -122,7 +122,7 @@ def register_awam_dataloader() -> None:
     # base_path = "datasets_example/df/avla_nov_8_merged_per_embodiment_2025-11-12/fr3_single_arm_franka_hand"
 
     annotation_path = f"{base_path}/annotation"
-    avla_action_multiview_dataset = L(ActionMultiViewDatasetDF)(
+    df_action_multiview_dataset = L(ActionMultiViewDatasetDF)(
         train_annotation_path=f"{annotation_path}/train",
         val_annotation_path=f"{annotation_path}/val",
         test_annotation_path=f"{annotation_path}/test",
@@ -139,7 +139,7 @@ def register_awam_dataloader() -> None:
         gripper_key="continuous_gripper_state",
         text_key="text",
     )
-    avla_action_multiview_val_dataset = L(ActionMultiViewDatasetDF)(
+    df_action_multiview_val_dataset = L(ActionMultiViewDatasetDF)(
         train_annotation_path=f"{annotation_path}/train",
         val_annotation_path=f"{annotation_path}/val",
         test_annotation_path=f"{annotation_path}/test",
@@ -160,10 +160,10 @@ def register_awam_dataloader() -> None:
     cs.store(
         group="data_train",
         package="dataloader_train",
-        name="avla_action_multiview_13frame_448_448_train",
+        name="df_action_multiview_13frame_448_448_train",
         node=L(get_generic_dataloader)(
-            dataset=avla_action_multiview_dataset,
-            sampler=L(get_sampler)(dataset=avla_action_multiview_dataset) if dist.is_initialized() else None,
+            dataset=df_action_multiview_dataset,
+            sampler=L(get_sampler)(dataset=df_action_multiview_dataset) if dist.is_initialized() else None,
             collate_fn=collate_fn,
             batch_size=1,
             drop_last=True,
@@ -174,10 +174,10 @@ def register_awam_dataloader() -> None:
     cs.store(
         group="data_val",
         package="dataloader_val",
-        name="avla_action_multiview_13frame_448_448_val",
+        name="df_action_multiview_13frame_448_448_val",
         node=L(get_generic_dataloader)(
-            dataset=avla_action_multiview_val_dataset,
-            sampler=L(get_sampler)(dataset=avla_action_multiview_val_dataset) if dist.is_initialized() else None,
+            dataset=df_action_multiview_val_dataset,
+            sampler=L(get_sampler)(dataset=df_action_multiview_val_dataset) if dist.is_initialized() else None,
             collate_fn=collate_fn,
             batch_size=1,
             drop_last=True,
