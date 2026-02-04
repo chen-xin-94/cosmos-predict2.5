@@ -43,7 +43,26 @@ CHECKPOINT_DIR=$CHECKPOINTS_DIR/$CHECKPOINT_ITER
 export CUDA_VISIBLE_DEVICES=1
 
 python examples/action_conditioned.py \
-  -i assets/action_conditioned/concat_view/inference_params.json \
+  -i assets/action_conditioned/concat_view/df/inference_params.json \
   -o outputs/ac_mv_448_1344_${CHECKPOINT_ITER} \
   --experiment ac_reason_embeddings_rectified_flow_2b_multiview_448_1344 \
+  --checkpoint-path $CHECKPOINT_DIR/model_ema_bf16.pt
+
+
+# ============================================================================
+# AgiBotWorld Multiview Action-Conditioned Inference
+# Experiment: ac_reason_embeddings_rectified_flow_2b_agibot_480_1920
+# Resolution: 480x1920 (3 views of 480x640 concatenated along width)
+# ============================================================================
+
+CHECKPOINTS_DIR=/raid/chen.xin/repo/cosmos-predict2.5/imaginaire-output/cosmos_predict2_action_conditioned/cosmos_predict_v2p5/2b_agibot_multiview_action_conditioned_480_20260130_192745/checkpoints
+CHECKPOINT_ITER=$(cat $CHECKPOINTS_DIR/latest_checkpoint.txt)
+CHECKPOINT_DIR=$CHECKPOINTS_DIR/$CHECKPOINT_ITER
+
+export CUDA_VISIBLE_DEVICES=5
+
+python examples/action_conditioned.py \
+  -i assets/action_conditioned/concat_view/agibot/inference_params.json \
+  -o outputs/ac_agibot_480_1920_${CHECKPOINT_ITER} \
+  --experiment ac_reason_embeddings_rectified_flow_2b_agibot_480_1920 \
   --checkpoint-path $CHECKPOINT_DIR/model_ema_bf16.pt

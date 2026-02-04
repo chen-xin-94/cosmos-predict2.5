@@ -261,6 +261,96 @@ def load_multiview_action_fn():
     return load_fn
 
 
+def load_multiview_action_agibot_fn():
+    """
+    AgiBotWorld multi-view action loading function.
+    
+    Unlike DF dataset, AgiBotWorld has pre-computed 36-dim actions stored directly 
+    in the JSON files. This function loads actions directly and concatenates multi-view frames.
+    
+    This mirrors the training behavior of ActionConditionedMultiViewDataset_AGIBOT.
+    """
+
+    def load_fn(
+        json_data: dict,
+        video_path: str,
+        args: ActionConditionedInferenceArguments,
+    ) -> dict:
+        """
+        Load pre-computed actions and multi-view frames from JSON for AgiBotWorld.
+
+        Args:
+            json_data: JSON data containing pre-computed actions and multi-view video paths
+            video_path: Not used directly; we read all videos from json_data["videos"]
+            args: Inference arguments (resolution should be "480,1920" for 3 views)
+
+        Returns:
+            Dictionary containing actions, concatenated initial frame, and metadata
+        """
+        # Load actions directly from JSON (pre-computed for AgiBotWorld)
+        all_actions = np.array(json_data["action"])
+        
+        # Apply fps downsampling to actions
+        # For fps_downsample_ratio=6, we sample every 6th frame
+        # Actions correspond to transitions between frames, so we sample actions accordingly
+        sampled_actions = all_actions[::args.fps_downsample_ratio]
+        
+        # Get the chunk of actions starting from start_frame_idx
+        # Note: actions are transitions, so action[i] is the transition from frame[i] to frame[i+1]
+        actions = sampled_actions[args.start_frame_idx:]
+        
+        # Apply action scaling if needed (though agibot actions are pre-scaled to [0,1])
+        if args.action_scaler != 1.0:
+            actions = actions * args.action_scaler
+
+        # Parse resolution to get per-view dimensions
+        # For 480x1920 with 3 views: per_view_h=480, per_view_w=640
+        if args.resolution != "none":
+            h, w = map(int, args.resolution.split(","))
+            num_views = len(json_data["videos"])
+            per_view_h = h
+            per_view_w = w // num_views
+        else:
+            per_view_h, per_view_w = 480, 640
+            num_views = len(json_data["videos"])
+
+        # Load and process each camera view
+        frames_list = []
+        input_root = args.input_root
+        
+        for cam_idx in range(num_views):
+            video_info = json_data["videos"][cam_idx]
+            if isinstance(video_info, dict):
+                cam_video_path = str(input_root / video_info["video_path"]) if not video_info["video_path"].startswith("/") else video_info["video_path"]
+            else:
+                cam_video_path = str(input_root / video_info) if not video_info.startswith("/") else video_info
+
+            # Load video and extract initial frame
+            video_array = mediapy.read_video(cam_video_path)
+            
+            # Apply fps downsampling to video frames
+            video_array = video_array[::args.fps_downsample_ratio]
+            
+            # Extract the frame at start_frame_idx
+            img_array = video_array[args.start_frame_idx]
+            
+            # Resize to per-view resolution
+            img_array = mediapy.resize_image(img_array, (per_view_h, per_view_w))
+            frames_list.append(img_array)
+
+        # Concatenate all views along width (axis=1 for H,W,C format)
+        combined_frame = np.concatenate(frames_list, axis=1)
+
+        return {
+            "actions": actions,
+            "initial_frame": combined_frame,
+            "video_array": None,  # Not used for multi-view
+            "video_path": video_path,
+        }
+
+    return load_fn
+
+
 def load_callable(name: str):
     """Load a callable function from a module path string."""
     from importlib import import_module

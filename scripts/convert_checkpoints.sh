@@ -34,3 +34,16 @@ CHECKPOINT_DIR=$CHECKPOINTS_DIR/$CHECKPOINT_ITER
 
 # Convert DCP checkpoint to PyTorch format
 python ./scripts/convert_distcp_to_pt.py $CHECKPOINT_DIR/model $CHECKPOINT_DIR
+
+
+# ============================================================================
+# AgiBotWorld Multiview Action-Conditioned Checkpoint Conversion
+# Experiment: ac_reason_embeddings_rectified_flow_2b_agibot_480_1920
+# ============================================================================
+
+AGIBOT_CHECKPOINTS_DIR=/raid/chen.xin/repo/cosmos-predict2.5/imaginaire-output/cosmos_predict2_action_conditioned/cosmos_predict_v2p5/2b_agibot_multiview_action_conditioned_480_20260130_192745/checkpoints
+AGIBOT_CHECKPOINT_ITER=$(cat $AGIBOT_CHECKPOINTS_DIR/latest_checkpoint.txt)
+AGIBOT_CHECKPOINT_DIR=$AGIBOT_CHECKPOINTS_DIR/$AGIBOT_CHECKPOINT_ITER
+
+# Convert DCP checkpoint to PyTorch format
+python ./scripts/convert_distcp_to_pt.py $AGIBOT_CHECKPOINT_DIR/model $AGIBOT_CHECKPOINT_DIR
