@@ -104,6 +104,69 @@ arm_states[::fps_downsample_ratio]  # Take every Nth state
 
 > **Critical**: Training and inference must use the **same** `fps_downsample_ratio`, otherwise temporal dynamics won't match what the model learned.
 
+#### Sliding Window Mechanism
+
+The action-conditioned dataset slices each episode into **overlapping windows** at dataset initialization time:
+
+```python
+# cosmos_predict2/_src/predict2/action/datasets/dataset_local.py#L206-L227
+def _load_and_process_ann_file(self, ann_file):
+    samples = []
+    n_frames = len(ann[self._state_key])
+    
+    # OVERLAP: Each window starts every `start_frame_interval` frames (=1 for training)
+    for frame_i in range(0, n_frames, self.start_frame_interval):
+        sample = {"ann_file": ann_file, "frame_ids": []}
+        curr_frame_i = frame_i
+        
+        while True:
+            if curr_frame_i > (n_frames - 1):
+                break
+            sample["frame_ids"].append(curr_frame_i)
+            if len(sample["frame_ids"]) == self.sequence_length:
+                break
+            curr_frame_i += self.fps_downsample_ratio  # Fixed stride WITHIN window
+        
+        # Only add if we got a full sequence
+        if len(sample["frame_ids"]) == self.sequence_length:
+            samples.append(sample)
+    return samples
+```
+
+**Key Parameters:**
+
+| Parameter | Training Value | Meaning |
+|-----------|----------------|---------|
+| `num_action_per_chunk` | 12 | `sequence_length = 1 + 12 = 13` frames per window |
+| `fps_downsample_ratio` | 6 (typical) | Frames sampled every 6 raw frames **within** each window |
+| `start_frame_interval` | 1 (hardcoded) | **Overlap stride** — windows start every 1 frame |
+
+**Example**: For an episode with 100 frames, `fps_downsample_ratio=6`, `sequence_length=13`:
+- Window 1: frames `[0, 6, 12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72]`
+- Window 2: frames `[1, 7, 13, 19, 25, 31, 37, 43, 49, 55, 61, 67, 73]`
+- Window 3: frames `[2, 8, 14, 20, 26, 32, 38, 44, 50, 56, 62, 68, 74]`
+- ... up to ~28 valid windows (100 - 72 = 28 possible starting points)
+
+**Training Iteration Behavior:**
+
+Each iteration processes a batch of sliced windows, NOT an average over episodes:
+
+1. **Pre-processing (at init)**: Each episode → multiple overlapping windows stored as separate samples
+2. **Per iteration**: DataLoader samples `batch_size` windows (e.g., 4), potentially from **different episodes**
+3. **Backprop**: Computed on the batched loss over all windows — no episode-level aggregation
+
+```
+Episode 1 (300 frames) → ~228 sliced windows
+Episode 2 (200 frames) → ~128 sliced windows
+...
+Total samples = sum of all windows across all episodes
+
+Training iteration:
+  DataLoader → randomly samples batch_size=4 windows (can be from 4 different episodes)
+  → Forward pass on batch
+  → Single backward pass on batched loss
+```
+
 ### 2.4 Multi-view Implementation
 
 ```python
@@ -158,70 +221,7 @@ def get_frame_indices_w_lowered_fps(
 
 ### 3.2 Action-Conditioned: Fixed Stride with Overlapping Windows
 
-**No FPS thresholds** — uses `fps_downsample_ratio` with sliding window slicing:
-
-The action-conditioned dataset slices each episode into **overlapping windows** at dataset initialization time, not during iteration:
-
-```python
-# cosmos_predict2/_src/predict2/action/datasets/dataset_local.py#L206-L227
-def _load_and_process_ann_file(self, ann_file):
-    samples = []
-    n_frames = len(ann[self._state_key])
-    
-    # OVERLAP: Each window starts every `start_frame_interval` frames (=1 for training)
-    for frame_i in range(0, n_frames, self.start_frame_interval):
-        sample = {"ann_file": ann_file, "frame_ids": []}
-        curr_frame_i = frame_i
-        
-        while True:
-            if curr_frame_i > (n_frames - 1):
-                break
-            sample["frame_ids"].append(curr_frame_i)
-            if len(sample["frame_ids"]) == self.sequence_length:
-                break
-            curr_frame_i += self.fps_downsample_ratio  # Fixed stride WITHIN window
-        
-        # Only add if we got a full sequence
-        if len(sample["frame_ids"]) == self.sequence_length:
-            samples.append(sample)
-    return samples
-```
-
-#### Key Parameters
-
-| Parameter | Training Value | Meaning |
-|-----------|----------------|---------|
-| `num_action_per_chunk` | 12 | `sequence_length = 1 + 12 = 13` frames per window |
-| `fps_downsample_ratio` | 6 (typical) | Frames sampled every 6 raw frames **within** each window |
-| `start_frame_interval` | 1 (hardcoded) | **Overlap stride** — windows start every 1 frame |
-
-#### Visual Example
-
-For an episode with 100 frames, `fps_downsample_ratio=6`, `sequence_length=13`:
-- Window 1: frames `[0, 6, 12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72]`
-- Window 2: frames `[1, 7, 13, 19, 25, 31, 37, 43, 49, 55, 61, 67, 73]`
-- Window 3: frames `[2, 8, 14, 20, 26, 32, 38, 44, 50, 56, 62, 68, 74]`
-- ... up to ~28 valid windows (100 - 72 = 28 possible starting points)
-
-#### What Exactly Happens Per Training Iteration
-
-**Each iteration (one backprop) processes a batch of sliced windows, NOT an average over episodes:**
-
-1. **Pre-processing (at init)**: Each episode → multiple overlapping windows stored as separate samples
-2. **Per iteration**: DataLoader samples `batch_size` windows (e.g., 4), potentially from **different episodes**
-3. **Backprop**: Computed on the batched loss over all windows — no episode-level aggregation
-
-```
-Episode 1 (300 frames) → ~228 sliced windows
-Episode 2 (200 frames) → ~128 sliced windows
-...
-Total samples = sum of all windows across all episodes
-
-Training iteration:
-  DataLoader → randomly samples batch_size=4 windows (can be from 4 different episodes)
-  → Forward pass on batch
-  → Single backward pass on batched loss
-```
+**No FPS thresholds** — uses `fps_downsample_ratio` (see Section 2.3 for detailed explanation) with sliding window slicing. All valid segments are extracted as overlapping windows during dataset initialization (see Section 4.2 for pre-clipping details).
 
 ### 3.3 Multi-view: Fixed Stride per View
 
@@ -233,7 +233,7 @@ frame_indices = list(range(frame_start, frame_end, self.fps_downsample_factor))
 
 ---
 
-## 4. Pre-Clipping & Frame Sampling Strategy (Training)
+## 4. Training Data Preparation: Video Sampling & Clipping Strategies
 
 ### 4.1 Standard: Chunk-Based Sampling with Caption Windows
 
@@ -275,51 +275,17 @@ frame_start = chunk_frame_start + int(np.random.choice(n_frames_in_chunk - n_tar
 frame_end = frame_start + n_target_frames
 ```
 
-**What happens to the rest of the video?**
-- **Not dropped permanently** — the video exists in the dataset
-- **Different chunks used in different epochs** — random chunk selection per [__getitem__](cosmos_predict2/_src/predict2/datasets/local_datasets/dataset_video.py#190-227)
-- Caption is associated with the selected chunk
+**Caption Alignment**: Caption is associated with the selected chunk (different chunks sampled per epoch).
 
 ---
 
 ### 4.2 Action-Conditioned: Sliding Window (All Possible Segments)
 
-**Pre-processing extracts ALL valid segments** with configurable overlap:
-
-```python
-# cosmos_predict2/_src/predict2/action/datasets/dataset_local.py#L206-L227
-def _load_and_process_ann_file(self, ann_file):
-    samples = []
-    n_frames = len(ann[self._state_key])
-    
-    # Sliding window with start_frame_interval stride
-    for frame_i in range(0, n_frames, self.start_frame_interval):
-        sample = dict()
-        sample["ann_file"] = ann_file
-        sample["frame_ids"] = []
-        curr_frame_i = frame_i
-        
-        while True:
-            if curr_frame_i > (n_frames - 1):
-                break
-            sample["frame_ids"].append(curr_frame_i)
-            if len(sample["frame_ids"]) == self.sequence_length:
-                break
-            curr_frame_i += self.fps_downsample_ratio
-        
-        # Only add if we got full sequence
-        if len(sample["frame_ids"]) == self.sequence_length:
-            samples.append(sample)
-    
-    return samples
-```
-
-**What happens to the rest of the video?**
-- **Nothing is dropped** — all valid 13-frame windows are extracted as separate samples
-- Training: `start_frame_interval = 1` (hardcoded in `dataset_local.py#L116`)
-- Validation/Test: `val_start_frame_interval = 1` (all configs in `data.py` use 1)
-- **Every possible starting frame generates a sample** for both train and val
-- For a 100-frame video with 13-frame windows: creates **88 training samples** (100 - 13 + 1)
+**Pre-processing extracts ALL valid segments** with overlapping windows (see Section 2.3 for detailed sliding window mechanism):
+- Training: `start_frame_interval = 1` (hardcoded) — every possible starting frame generates a sample
+- Validation: `val_start_frame_interval = 1` (all configs use 1)
+- **Example**: 100-frame video with 13-frame windows creates **88 training samples** (100 - 13 + 1)
+- Each window uses `fps_downsample_ratio` stride for frame selection within the window
 
 ---
 
@@ -342,10 +308,7 @@ frame_end = frame_start + self.num_frames * self.fps_downsample_factor
 frame_indices = list(range(frame_start, frame_end, self.fps_downsample_factor))
 ```
 
-**What happens to the rest of the video?**
-- **Not dropped** — different `t2w_windows` used in different epochs
-- All camera views use the **same chunk** for temporal consistency
-- Each window has associated caption for that time segment
+**Multi-view Consistency**: All camera views use the **same chunk** for temporal consistency, with different `t2w_windows` sampled per epoch.
 
 ---
 
@@ -359,7 +322,7 @@ frame_indices = list(range(frame_start, frame_end, self.fps_downsample_factor))
 
 ---
 
-## 5. Long-horizon Video Generation
+## 5. Inference: Long-Horizon Video Generation Strategies
 
 ### 5.1 Standard: Autoregressive Sliding Window
 
