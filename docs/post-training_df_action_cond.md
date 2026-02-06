@@ -1,6 +1,12 @@
-# Note 02.12.2025
+# Note on single-view action-conditioned video generation fine-tuned with data foundry data
 
-Data preprocessing scripts are under `df_data_preprocessing/`
+
+## 1. Data Preprocessing
+
+Data preprocessing scripts are under `scripts/preprocessing`
+
+Create json files with specific format with `scripts/preprocessing/preprocess_df.py`.
+Create train-val-test split with `scripts/preprocessing/split.py`.
 
 Training annotations (json files) are stored under `datasets/df/avla_nov_8_merged_per_embodiment_2025-11-12/fr3_single_arm_franka_hand/annotation/`
 The full episodes are recorded. During training, set `fps_downsample_ratio=6` to simulate training with `FPS=5` for consistency with bridge dataset.
@@ -10,14 +16,8 @@ Class `Dataset_3D_DF` is defined in `cosmos_predict2/_src/predict2/action/datase
 It appears that action-conditioned training requires no prompt (As in original post-training pipeline). Modified dataloader to also enable training with text.
 
 
-
-## 1. Data Preprocessing
-Create json files with specific format with `scripts/preprocessing/preprocess_df.py`.
-Create train-val-test split with `scripts/preprocessing/split.py`.
-
 ## 2. Training Arguments
 Currently, all training arguments and configs are defined in Dict `ac_reason_embeddings_rectified_flow_2b_256_320_df` under `cosmos_predict2/experiments/base/action.py`.
-
 
 For now, `bash_path` in [`cosmos_predict2/_src/predict2/action/configs/action_conditioned/data.py`](../cosmos_predict2/_src/predict2/action/configs/action_conditioned/data.py#L33) need to be manually modified if using other data from data_foundry.
 
