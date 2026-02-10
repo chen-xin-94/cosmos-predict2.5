@@ -1,0 +1,84 @@
+# DiT Tokenization: From VAE Latents to Transformer Tokens
+
+This document explains how video latents from the 3D VAE are transformed into tokens for the Diffusion Transformer (DiT) in Cosmos Predict2.5.
+
+## Overview
+
+The transformation converts VAE output `(B, C, T, H, W)` into DiT tokens `(B, T', H', W', D)` where each spatial-temporal position becomes a token with dimension `D`.
+
+## Dimension Transformation Pipeline
+
+### For Cosmos-Predict2.5-2B (Video2World / Action-Conditioned)
+
+| Stage | Shape | Description |
+|-------|-------|-------------|
+| **VAE Output** | `(B, 16, T, H, W)` | 16-channel latent; 4× temporal, 8× spatial compression |
+| **+ Condition Mask** | `(B, 17, T, H, W)` | Binary mask indicating condition vs. generation frames |
+| **Rearrange (Patchify)** | `(B, T, H/2, W/2, 68)` | 2×2 spatial patches folded into channel dim: `17×1×2×2=68` |
+| **Linear Projection** | `(B, T, H/2, W/2, 2048)` | Learned projection from 68 → 2048 (model hidden dim) |
+| **For Attention** | `(B, T×H'×W', 2048)` | Flattened to `T×H'×W'` tokens, each 2048-dimensional |
+
+### Configuration (2B Model)
+
+```python
+patch_spatial = 2      # 2×2 spatial patches
+patch_temporal = 1     # No temporal patching
+model_channels = 2048  # DiT hidden dimension
+in_channels = 16       # VAE channels (+ 1 mask = 17)
+```
+
+## Concrete Example
+
+Input video: **121 frames @ 720×1280** resolution
+
+```
+Raw Video:        (B, 3, 121, 720, 1280)
+                         ↓ 3D VAE Encoder (4× temporal, 8× spatial)
+VAE Latent:       (B, 16, 31, 90, 160)
+                         ↓ Concat condition mask
+With Mask:        (B, 17, 31, 90, 160)
+                         ↓ PatchEmbed: Rearrange 2×2 spatial patches
+Rearranged:       (B, 31, 45, 80, 68)     # 90/2=45, 160/2=80, 17×4=68
+                         ↓ PatchEmbed: Linear(68 → 2048)
+DiT Input:        (B, 31, 45, 80, 2048)
+                         ↓ Flatten for attention
+Tokens:           (B, 111600, 2048)       # 31×45×80 = 111,600 tokens
+```
+
+## Key Components
+
+### PatchEmbed Class
+
+Located in [`minimal_v4_dit.py`](../cosmos_predict2/_src/predict2/networks/minimal_v4_dit.py):
+
+```python
+class PatchEmbed(nn.Module):
+    def __init__(self, spatial_patch_size, temporal_patch_size, in_channels, out_channels):
+        self.proj = nn.Sequential(
+            Rearrange("b c (t r) (h m) (w n) -> b t h w (c r m n)",
+                      r=temporal_patch_size, m=spatial_patch_size, n=spatial_patch_size),
+            nn.Linear(in_channels * spatial_patch_size**2 * temporal_patch_size, out_channels),
+        )
+```
+
+### Condition Mask Purpose
+
+The mask channel (`condition_video_input_mask`) indicates:
+- **1.0** = Conditioning frame (given, don't denoise)
+- **0.0** = Generation frame (predict this)
+
+This enables video continuation where initial frames guide the generation.
+
+## Inverse: Unpatchify
+
+After DiT processing, the output is converted back:
+
+```python
+def unpatchify(self, x_B_T_H_W_M):
+    # x_B_T_H_W_M: (B, T, H, W, out_channels × patch_spatial² × patch_temporal)
+    return rearrange(x_B_T_H_W_M,
+        "B T H W (p1 p2 t C) -> B C (T t) (H p1) (W p2)",
+        p1=patch_spatial, p2=patch_spatial, t=patch_temporal)
+```
+
+This reconstructs the original latent shape `(B, 16, T, H, W)` for VAE decoding.
