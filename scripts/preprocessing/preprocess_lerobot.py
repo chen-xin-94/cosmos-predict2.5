@@ -17,6 +17,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from multiprocessing import Pool
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -26,6 +27,8 @@ LEROBOT_CONFIGS = {
     "droid": {
         "dataset_path": "/mnt/central_storage/data_pool/droid_lerobot",
         "output_path": "datasets/droid/annotation/all",
+        "stats_path": "assets/action_conditioned/concat_view/droid",
+        "stats_filename": "stats.json",
         "state_key": "observation.state",
         "action_key": "action",
         "camera_views": [
@@ -53,6 +56,104 @@ def to_float_list(value: np.ndarray | list[float]) -> list[float]:
     """Convert a state/action value to a flat Python float list."""
     arr = np.asarray(value, dtype=np.float32).reshape(-1)
     return [float(x) for x in arr]
+
+
+def summarize_episode_array(values: np.ndarray) -> dict[str, Any]:
+    """
+    Summarize one episode for weighted aggregation.
+
+    We treat each timestep equally and use timestep count as the weight.
+    """
+    if values.ndim != 2:
+        raise ValueError(f"Expected 2D array, got shape={values.shape}")
+    if values.shape[0] == 0:
+        raise ValueError("Cannot summarize empty episode array")
+
+    return {
+        "n": int(values.shape[0]),
+        "mean": np.mean(values, axis=0, dtype=np.float64).tolist(),
+        "var": np.var(values, axis=0, dtype=np.float64).tolist(),
+        "min": np.min(values, axis=0).tolist(),
+        "max": np.max(values, axis=0).tolist(),
+    }
+
+
+class WeightedStatsAccumulator:
+    """Accumulate per-episode summary stats using timestep-weighted aggregation."""
+
+    def __init__(self, name: str):
+        self.name = name
+        self.total_n = 0
+        self.num_episodes = 0
+        self._sum: np.ndarray | None = None
+        self._sum_sq: np.ndarray | None = None
+        self._min: np.ndarray | None = None
+        self._max: np.ndarray | None = None
+
+    def update(self, episode_stats: dict[str, Any]) -> None:
+        n = int(episode_stats["n"])
+        if n <= 0:
+            return
+
+        mean = np.asarray(episode_stats["mean"], dtype=np.float64)
+        var = np.asarray(episode_stats["var"], dtype=np.float64)
+        min_vals = np.asarray(episode_stats["min"], dtype=np.float64)
+        max_vals = np.asarray(episode_stats["max"], dtype=np.float64)
+
+        if self._sum is None:
+            self._sum = np.zeros_like(mean, dtype=np.float64)
+            self._sum_sq = np.zeros_like(mean, dtype=np.float64)
+            self._min = min_vals.copy()
+            self._max = max_vals.copy()
+        else:
+            if mean.shape != self._sum.shape:
+                raise ValueError(
+                    f"{self.name} dimension mismatch: "
+                    f"expected {self._sum.shape}, got {mean.shape}"
+                )
+            self._min = np.minimum(self._min, min_vals)
+            self._max = np.maximum(self._max, max_vals)
+
+        # E[x^2] = Var[x] + (E[x])^2
+        self._sum += n * mean
+        self._sum_sq += n * (var + np.square(mean))
+        self.total_n += n
+        self.num_episodes += 1
+
+    def finalize(self) -> dict[str, Any]:
+        if self.total_n <= 0 or self._sum is None or self._sum_sq is None:
+            raise ValueError(f"No samples accumulated for {self.name}")
+
+        mean = self._sum / self.total_n
+        var = self._sum_sq / self.total_n - np.square(mean)
+        var = np.maximum(var, 0.0)
+        std = np.sqrt(var)
+        assert self._min is not None and self._max is not None
+
+        return {
+            "mean": mean.tolist(),
+            "std": std.tolist(),
+            "min": self._min.tolist(),
+            "max": self._max.tolist(),
+            "total_frames": int(self.total_n),
+            "num_episodes": int(self.num_episodes),
+        }
+
+
+def load_meta_stats_reference(meta_stats_path: Path, state_key: str, action_key: str) -> dict[str, Any]:
+    """Load reference statistics from `meta/stats.json` for traceability/comparison."""
+    with open(meta_stats_path, "r") as f:
+        raw_stats = json.load(f)
+
+    if state_key not in raw_stats:
+        raise KeyError(f"State key '{state_key}' not found in {meta_stats_path}")
+    if action_key not in raw_stats:
+        raise KeyError(f"Action key '{action_key}' not found in {meta_stats_path}")
+
+    return {
+        "state": raw_stats[state_key],
+        "action": raw_stats[action_key],
+    }
 
 
 def parse_episode_index(parquet_path: Path) -> int:
@@ -95,8 +196,8 @@ def process_episode(
     camera_views: list[str],
     task_text_map: dict[int, str],
     strict_missing_videos: bool,
-) -> tuple[dict, int]:
-    """Convert one parquet episode into output JSON dict and missing-video count."""
+) -> tuple[dict[str, Any], int, dict[str, Any]]:
+    """Convert one parquet episode into output JSON dict, missing-video count, and summary stats."""
     required_columns = [state_key, action_key, "task_index", "episode_index"]
     df = pd.read_parquet(parquet_path, columns=required_columns)
     if df.empty:
@@ -126,23 +227,36 @@ def process_episode(
             f"{missing_videos}"
         )
 
-    states = [to_float_list(v) for v in df[state_key].tolist()]
-    actions = [to_float_list(v) for v in df[action_key].tolist()]
-    if len(states) != len(actions):
+    state_rows = [to_float_list(v) for v in df[state_key].tolist()]
+    action_rows = [to_float_list(v) for v in df[action_key].tolist()]
+    if len(state_rows) != len(action_rows):
         raise ValueError(
             f"State/action length mismatch for episode {episode_index_from_file}: "
-            f"{len(states)} vs {len(actions)}"
+            f"{len(state_rows)} vs {len(action_rows)}"
+        )
+    if len(state_rows) == 0:
+        raise ValueError(f"Episode has zero timesteps: {parquet_path}")
+
+    states = np.asarray(state_rows, dtype=np.float32)
+    actions = np.asarray(action_rows, dtype=np.float32)
+    if states.ndim != 2 or actions.ndim != 2:
+        raise ValueError(
+            f"Expected 2D state/action arrays, got state={states.shape}, action={actions.shape}"
         )
 
     output = {
         "text": text,
         "videos": videos,
-        "state": states,
-        "action": actions,
+        "state": states.tolist(),
+        "action": actions.tolist(),
         "episode_index": episode_index_from_file,
         "timesteps": len(df),
     }
-    return output, len(missing_videos)
+    summary_stats = {
+        "state": summarize_episode_array(states),
+        "action": summarize_episode_array(actions),
+    }
+    return output, len(missing_videos), summary_stats
 
 
 def _init_worker(
@@ -167,16 +281,16 @@ def _init_worker(
     }
 
 
-def _process_and_save_episode_worker(parquet_path_str: str) -> tuple[bool, int, str, str]:
+def _process_and_save_episode_worker(parquet_path_str: str) -> tuple[bool, int, str, str, dict[str, Any] | None]:
     """
     Worker entrypoint: process one episode parquet and write output JSON.
 
     Returns:
-        (ok, missing_video_count, parquet_path, error_message)
+        (ok, missing_video_count, parquet_path, error_message, summary_stats)
     """
     parquet_path = Path(parquet_path_str)
     try:
-        output, missing_count = process_episode(
+        output, missing_count, summary_stats = process_episode(
             parquet_path=parquet_path,
             dataset_path=_WORKER_CONTEXT["dataset_path"],
             state_key=_WORKER_CONTEXT["state_key"],
@@ -188,9 +302,9 @@ def _process_and_save_episode_worker(parquet_path_str: str) -> tuple[bool, int, 
         save_path = _WORKER_CONTEXT["output_path"] / f"{output['episode_index']:06d}.json"
         with open(save_path, "w") as f:
             json.dump(output, f, indent=4)
-        return True, missing_count, parquet_path_str, ""
+        return True, missing_count, parquet_path_str, "", summary_stats
     except Exception as e:
-        return False, 0, parquet_path_str, str(e)
+        return False, 0, parquet_path_str, str(e), None
 
 
 def main():
@@ -206,6 +320,18 @@ def main():
         type=Path,
         default=None,
         help="Override output directory (defaults to config output_path)",
+    )
+    parser.add_argument(
+        "--stats-path",
+        type=Path,
+        default=None,
+        help="Directory to save aggregated stats JSON (defaults to config stats_path)",
+    )
+    parser.add_argument(
+        "--stats-filename",
+        type=str,
+        default=None,
+        help="Stats JSON filename (defaults to config stats_filename)",
     )
     parser.add_argument(
         "--max-episodes",
@@ -239,12 +365,15 @@ def main():
     config = LEROBOT_CONFIGS[args.config_name]
     dataset_path = Path(config["dataset_path"])
     output_path = args.output_path if args.output_path is not None else Path(config["output_path"])
+    stats_path = args.stats_path if args.stats_path is not None else Path(config["stats_path"])
+    stats_filename = args.stats_filename if args.stats_filename is not None else str(config["stats_filename"])
     state_key = config["state_key"]
     action_key = config["action_key"]
     camera_views = config["camera_views"]
 
     data_root = dataset_path / "data"
     meta_tasks_path = dataset_path / "meta" / "tasks.jsonl"
+    meta_stats_path = dataset_path / "meta" / "stats.json"
 
     if not dataset_path.exists():
         raise FileNotFoundError(f"Dataset path does not exist: {dataset_path}")
@@ -252,8 +381,11 @@ def main():
         raise FileNotFoundError(f"Data directory not found: {data_root}")
     if not meta_tasks_path.exists():
         raise FileNotFoundError(f"tasks.jsonl not found: {meta_tasks_path}")
+    if not meta_stats_path.exists():
+        raise FileNotFoundError(f"stats.json not found: {meta_stats_path}")
 
     output_path.mkdir(parents=True, exist_ok=True)
+    stats_path.mkdir(parents=True, exist_ok=True)
     parquet_files = sorted(data_root.glob("chunk-*/episode_*.parquet"))
     if args.max_episodes is not None:
         parquet_files = parquet_files[: args.max_episodes]
@@ -261,6 +393,7 @@ def main():
     print(f"Config name: {args.config_name}")
     print(f"Dataset path: {dataset_path}")
     print(f"Output path: {output_path}")
+    print(f"Stats output: {stats_path / stats_filename}")
     print(f"State key: {state_key}")
     print(f"Action key: {action_key}")
     print(f"Camera views: {camera_views}")
@@ -271,10 +404,17 @@ def main():
     print("-" * 60)
 
     task_text_map = load_task_text_map(meta_tasks_path)
+    meta_stats_reference = load_meta_stats_reference(
+        meta_stats_path=meta_stats_path,
+        state_key=state_key,
+        action_key=action_key,
+    )
 
     processed = 0
     failed = 0
     missing_video_total = 0
+    state_stats_acc = WeightedStatsAccumulator("state")
+    action_stats_acc = WeightedStatsAccumulator("action")
 
     parquet_paths_str = [str(p) for p in parquet_files]
     worker_init_args = (
@@ -289,7 +429,7 @@ def main():
 
     def consume_results(iterator):
         nonlocal processed, failed, missing_video_total
-        for ok, missing_count, parquet_path_str, error_msg in tqdm(
+        for ok, missing_count, parquet_path_str, error_msg, summary_stats in tqdm(
             iterator,
             total=len(parquet_paths_str),
             desc="Processing episodes",
@@ -297,6 +437,10 @@ def main():
             if ok:
                 processed += 1
                 missing_video_total += missing_count
+                if summary_stats is None:
+                    raise ValueError(f"Missing summary stats for successful episode: {parquet_path_str}")
+                state_stats_acc.update(summary_stats["state"])
+                action_stats_acc.update(summary_stats["action"])
             else:
                 failed += 1
                 print(f"[ERROR] {parquet_path_str}: {error_msg}")
@@ -326,6 +470,20 @@ def main():
             _init_worker(*worker_init_args)
             with ThreadPoolExecutor(max_workers=args.num_workers) as executor:
                 consume_results(executor.map(_process_and_save_episode_worker, parquet_paths_str))
+
+    if processed > 0:
+        final_stats = {
+            "dataset_name": args.config_name,
+            "state_key": state_key,
+            "action_key": action_key,
+            "state": state_stats_acc.finalize(),
+            "action": action_stats_acc.finalize(),
+            "reference_meta_stats": meta_stats_reference,
+        }
+        stats_file = stats_path / stats_filename
+        with open(stats_file, "w") as f:
+            json.dump(final_stats, f, indent=4)
+        print(f"[OK] Saved aggregated stats to {stats_file}")
 
     print("\n" + "=" * 60)
     print(f"Processed: {processed}")
