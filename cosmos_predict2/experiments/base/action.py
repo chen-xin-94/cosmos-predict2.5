@@ -307,6 +307,44 @@ ac_reason_embeddings_rectified_flow_2b_agibot_480_1920 = LazyDict(
 
 
 
+"""
+Multi-view 3-camera action-conditioned training WITHOUT text conditioning
+Inherits from ac_reason_embeddings_rectified_flow_2b_multiview_448_1344 with use_prompt=False
+
+torchrun --nproc_per_node=1 --master_port=12341 -m scripts.train --config=cosmos_predict2/_src/predict2/action/configs/action_conditioned/config.py  -- experiment=ac_reason_embeddings_rectified_flow_2b_multiview_448_1344_no_text ~dataloader_train.dataloaders
+"""
+ac_reason_embeddings_rectified_flow_2b_multiview_448_1344_wo_text = LazyDict(
+    dict(
+        defaults=[
+            "ac_reason_embeddings_rectified_flow_2b_multiview_448_1344",  # Inherit from the full experiment
+            "_self_",
+        ],
+        job=dict(
+            name=f"2b_df_multiview_action_wo_text_conditioned_448_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+        ),
+        checkpoint=dict(
+            save_iter=2_000,
+        ),
+        trainer=dict(
+            max_iter=10_000,
+            logging_iter=10,
+            callbacks=dict(
+                every_n_sample_reg=dict(every_n=1_000, do_x0_prediction=False, guidance=[0, 3, 7], fps=16, save_s3=False),
+                every_n_sample_ema=dict(every_n=1_000, do_x0_prediction=False, guidance=[0, 3, 7], fps=16, save_s3=False),
+            ),
+        ),
+        model=dict(
+            config=dict(
+                conditioner=dict(
+                    text=dict(use_prompt=False),
+                ),
+            ),
+        ),
+    ),
+    flags={"allow_objects": True},
+)
+
+
 cs = ConfigStore.instance()
 
 
@@ -389,6 +427,7 @@ experiments = {
     ac_reason_embeddings_rectified_flow_2b_agibot_480_1920: "ac_reason_embeddings_rectified_flow_2b_agibot_480_1920",
     ac_reason_embeddings_rectified_flow_2b_multiview_448_1344_smoke: "ac_reason_embeddings_rectified_flow_2b_multiview_448_1344_smoke",
     ac_reason_embeddings_rectified_flow_2b_agibot_480_1920_smoke: "ac_reason_embeddings_rectified_flow_2b_agibot_480_1920_smoke",
+    ac_reason_embeddings_rectified_flow_2b_multiview_448_1344_no_text: "ac_reason_embeddings_rectified_flow_2b_multiview_448_1344_no_text",
 }
 
 
