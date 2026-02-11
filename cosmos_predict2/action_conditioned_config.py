@@ -104,7 +104,10 @@ class ActionConditionedInferenceArguments(CommonInferenceArguments):
     action_load_fn: str = "cosmos_predict2.action_conditioned.load_default_action_fn"
     """A callable that constructs a function which loads action information for a given data sample."""
 
-    use_text: bool = False
+    use_prompt: bool | None = None
+    """Whether to condition on text prompt. If None, falls back to model's training config (conditioner.text.use_prompt)."""
+
+
 
 
 ActionConditionedInferenceOverrides = get_overrides_cls(ActionConditionedInferenceArguments, exclude=["name"])

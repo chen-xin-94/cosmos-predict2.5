@@ -224,7 +224,6 @@ class Dataset_3D_AGIBOT(Dataset_3D_DF):
                 data["t5_text_embeddings"] = torch.from_numpy(t5_embeddings)
             else:
                 data["t5_text_embeddings"] = torch.zeros(512, 1024, dtype=torch.bfloat16)
-                data["ai_caption"] = ""
             data["t5_text_mask"] = torch.ones(512, dtype=torch.int64)
             data["fps"] = 4
             data["image_size"] = 256 * torch.ones(4)

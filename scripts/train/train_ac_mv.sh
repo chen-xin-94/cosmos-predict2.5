@@ -1,6 +1,6 @@
 #!/bin/bash
 # Training script for multi-view action-conditioned video generation
-# 3 cameras (left, top, wrist) concatenated along width: 256x960
+# 3 cameras (left, top, wrist) concatenated along width: 448x1344
 
 set -e
 

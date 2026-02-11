@@ -130,16 +130,17 @@ class ActionVideo2WorldInference:
             assert negative_prompt is not None, "Negative prompt is required when use_neg_prompt is True"
 
         # Compute text embeddings
+        caption_key = self.model.input_caption_key
         if self.model.text_encoder is not None:
-            data_batch["ai_caption"] = [prompt]
+            data_batch[caption_key] = [prompt]
             data_batch["t5_text_embeddings"] = self.model.text_encoder.compute_text_embeddings_online(
-                data_batch={"ai_caption": [prompt], "images": None},
-                input_caption_key="ai_caption",
+                data_batch={caption_key: [prompt], "images": None},
+                input_caption_key=caption_key,
             )
             if use_neg_prompt:
                 data_batch["neg_t5_text_embeddings"] = self.model.text_encoder.compute_text_embeddings_online(
-                    data_batch={"ai_caption": [negative_prompt], "images": None},
-                    input_caption_key="ai_caption",
+                    data_batch={caption_key: [negative_prompt], "images": None},
+                    input_caption_key=caption_key,
                 )
         else:
             data_batch["t5_text_embeddings"] = get_text_embedding(prompt)

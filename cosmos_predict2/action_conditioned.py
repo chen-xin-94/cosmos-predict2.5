@@ -501,9 +501,10 @@ def inference(
             vid_input = (vid_input * 255.0).to(torch.uint8)
             vid_input = vid_input.unsqueeze(0).permute(0, 2, 1, 3, 4)  # (B, C, T, H, W)
 
+            _use_prompt = inference_args.use_prompt if inference_args.use_prompt is not None else video2world_cli.model.config.conditioner.text.use_prompt
             # Call generate_vid2world
             video = video2world_cli.generate_vid2world(
-                prompt=text if inference_args.use_text else "",
+                prompt=text if _use_prompt else "",
                 input_path=vid_input,
                 action=torch.from_numpy(actions_chunk).float()
                 if isinstance(actions_chunk, np.ndarray)

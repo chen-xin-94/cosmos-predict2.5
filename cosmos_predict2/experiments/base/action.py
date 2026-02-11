@@ -146,6 +146,7 @@ ac_reason_embeddings_rectified_flow_2b_256_320_df = LazyDict(
         ),
         model=dict(
             config=dict(
+                input_caption_key="text",  # Action datasets use "text" key, not "ai_caption"
                 conditioner=dict(
                     text=dict(use_prompt=False),
                 ),
@@ -216,6 +217,7 @@ ac_reason_embeddings_rectified_flow_2b_multiview_448_1344 = LazyDict(
         model_parallel=dict(context_parallel_size=1),
         model=dict(
             config=dict(
+                input_caption_key="text",  # Action datasets use "text" key, not "ai_caption"
                 min_num_conditional_frames=1,
                 max_num_conditional_frames=1,
                 conditional_frames_probs=None,
@@ -288,6 +290,7 @@ ac_reason_embeddings_rectified_flow_2b_agibot_480_1920 = LazyDict(
         model_parallel=dict(context_parallel_size=1),
         model=dict(
             config=dict(
+                input_caption_key="text",  # Action datasets use "text" key, not "ai_caption"
                 min_num_conditional_frames=1,
                 max_num_conditional_frames=1,
                 conditional_frames_probs=None,
@@ -427,7 +430,7 @@ experiments = {
     ac_reason_embeddings_rectified_flow_2b_agibot_480_1920: "ac_reason_embeddings_rectified_flow_2b_agibot_480_1920",
     ac_reason_embeddings_rectified_flow_2b_multiview_448_1344_smoke: "ac_reason_embeddings_rectified_flow_2b_multiview_448_1344_smoke",
     ac_reason_embeddings_rectified_flow_2b_agibot_480_1920_smoke: "ac_reason_embeddings_rectified_flow_2b_agibot_480_1920_smoke",
-    ac_reason_embeddings_rectified_flow_2b_multiview_448_1344_no_text: "ac_reason_embeddings_rectified_flow_2b_multiview_448_1344_no_text",
+    ac_reason_embeddings_rectified_flow_2b_multiview_448_1344_wo_text: "ac_reason_embeddings_rectified_flow_2b_multiview_448_1344_wo_text",
 }
 
 

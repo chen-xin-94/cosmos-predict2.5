@@ -169,7 +169,8 @@ def inference(
             else:
                 video_paths.append(str(input_video_path / json_data["videos"][cam_id]))
 
-        text = json_data["text"] if inference_args.use_text else ""
+        _use_prompt = inference_args.use_prompt if inference_args.use_prompt is not None else pipe.model.config.conditioner.text.use_prompt
+        text = json_data["text"] if _use_prompt else ""
 
         actions = get_action_sequence_from_states(
             json_data,

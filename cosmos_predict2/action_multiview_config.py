@@ -77,8 +77,8 @@ class ActionMultiviewInferenceArguments(CommonInferenceArguments):
     """FPS for saving output videos."""
     num_latent_conditional_frames: int = 1
     """Number of latent conditional frames (0, 1 or 2)."""
-    use_text: bool = True
-    """Whether to condition on text."""
+    use_prompt: bool | None = None
+    """Whether to condition on text prompt. If None, falls back to model's training config (conditioner.text.use_prompt)."""
 
     # Action processing parameters
     action_scaler: float = 20.0

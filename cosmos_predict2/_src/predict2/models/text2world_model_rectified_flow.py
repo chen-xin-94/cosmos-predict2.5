@@ -81,7 +81,7 @@ class Text2WorldModelRectifiedFlowConfig:
     input_data_key: str = "video"  # key to fetch input data from data_batch
     input_image_key: str = "images"  # key to fetch input image from data_batch
     input_caption_key: str = "ai_caption"  # Key used to fetch input captions
-    text_prompt_key: str = "text"
+
     use_torch_compile: bool = False
 
     state_ch: int = 16  # for latent model, ref to the latent channel number
@@ -187,7 +187,7 @@ class Text2WorldModelRectifiedFlow(ImaginaireModel):
         self.input_data_key = self.config.input_data_key  # by default it is video key for Video diffusion model
         self.input_image_key = self.config.input_image_key
         self.input_caption_key = self.config.input_caption_key
-        self.input_text_key = self.config.text_prompt_key
+
 
     def build_net(self, keep_on_cpu: bool = False):
         config = self.config
@@ -736,9 +736,16 @@ class Text2WorldModelRectifiedFlow(ImaginaireModel):
         # Obtain text embeddings online
         if self.config.text_encoder_config is not None and self.config.text_encoder_config.compute_online:
             if self.config.conditioner.text.use_prompt:
-                text_embeddings = self.text_encoder.compute_text_embeddings_online(data_batch, self.input_text_key)
+                text_data_batch = data_batch
             else:
-                text_embeddings = self.text_encoder.compute_text_embeddings_online(data_batch, self.input_caption_key)
+                if self.input_data_key in data_batch:
+                    batch_size = data_batch[self.input_data_key].shape[0]
+                elif self.input_image_key in data_batch:
+                    batch_size = data_batch[self.input_image_key].shape[0]
+                else:
+                    raise KeyError(f"Neither {self.input_data_key} nor {self.input_image_key} found in data_batch.")
+                text_data_batch = {self.input_caption_key: [""] * batch_size}
+            text_embeddings = self.text_encoder.compute_text_embeddings_online(text_data_batch, self.input_caption_key)
             data_batch["t5_text_embeddings"] = text_embeddings
             data_batch["t5_text_mask"] = torch.ones(text_embeddings.shape[0], text_embeddings.shape[1], device="cuda")
 
