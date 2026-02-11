@@ -20,6 +20,18 @@ parser.add_argument(
     default=28,
     help="Random seed for shuffling files.",
 )
+parser.add_argument(
+    "--train-ratio",
+    type=float,
+    default=0.90,
+    help="Ratio of files for training (default: 0.90).",
+)
+parser.add_argument(
+    "--val-ratio",
+    type=float,
+    default=0.05,
+    help="Ratio of files for validation (default: 0.05).",
+)
 args = parser.parse_args()
 
 processed_dir = args.processed_dir
@@ -47,8 +59,8 @@ random.seed(args.seed)
 random.shuffle(all_files)
 
 # Split sizes
-train_count = int(0.90 * total)
-val_count   = int(0.05 * total)
+train_count = int(args.train_ratio * total)
+val_count   = int(args.val_ratio * total)
 test_count  = total - train_count - val_count  # remaining
 
 print(f"Train: {train_count}, Val: {val_count}, Test: {test_count}")

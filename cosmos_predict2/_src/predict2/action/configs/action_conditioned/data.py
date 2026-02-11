@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import os
 
 from hydra.core.config_store import ConfigStore
@@ -22,6 +23,9 @@ from torch.utils.data import DataLoader, DistributedSampler
 from cosmos_predict2._src.imaginaire.lazy_config import LazyCall as L
 from cosmos_predict2._src.predict2.action.datasets.dataset_agibot import (
     ActionConditionedMultiViewDataset_AGIBOT,
+)
+from cosmos_predict2._src.predict2.action.datasets.dataset_droid import (
+    ActionConditionedMultiViewDataset_DROID,
 )
 from cosmos_predict2._src.predict2.action.datasets.dataset_df import Dataset_3D_DF
 from cosmos_predict2._src.predict2.action.datasets.dataset_local import Dataset_3D
@@ -56,6 +60,67 @@ df_smoke_val_annotation_path = os.path.join(df_smoke_base_path, "annotation/val"
 df_smoke_test_annotation_path = os.path.join(df_smoke_base_path, "annotation/test")
 
 agibot_smoke_base_annotation_path = "assets/action_conditioned/concat_view/agibot/annotation"
+
+# droid dataset path
+droid_base_path = "datasets/droid"
+droid_train_annotation_path = os.path.join(droid_base_path, "annotation/train")
+droid_val_annotation_path = os.path.join(droid_base_path, "annotation/val")
+droid_test_annotation_path = os.path.join(droid_base_path, "annotation/test")
+droid_action_stats_path = "assets/action_conditioned/concat_view/droid/stats.json"
+droid_lerobot_meta_info_path = "/mnt/central_storage/data_pool/droid_lerobot/meta/info.json"
+
+# droid smoke dataset path
+droid_smoke_base_path = "datasets/smoke_test/droid"
+droid_smoke_train_annotation_path = os.path.join(droid_smoke_base_path, "annotation/train")
+droid_smoke_val_annotation_path = os.path.join(droid_smoke_base_path, "annotation/val")
+droid_smoke_test_annotation_path = os.path.join(droid_smoke_base_path, "annotation/test")
+
+
+def _has_json_files(path: str) -> bool:
+    if not os.path.isdir(path):
+        return False
+    with os.scandir(path) as it:
+        for entry in it:
+            if entry.is_file() and entry.name.endswith(".json"):
+                return True
+    return False
+
+
+def _resolve_val_annotation_path(preferred_path: str, fallback_path: str) -> str:
+    # Some datasets are split as train/test only. Use test set for validation in that case.
+    if _has_json_files(preferred_path):
+        return preferred_path
+    return fallback_path
+
+
+def _load_droid_per_view_video_size(meta_info_path: str) -> list[int]:
+    # Prefer dataset metadata for canonical resolution; fallback to known DROID default.
+    default_size = [180, 320]
+    if not os.path.isfile(meta_info_path):
+        return default_size
+
+    try:
+        with open(meta_info_path, "r") as f:
+            info = json.load(f)
+        feature = info["features"]["observation.images.exterior_image_1_left"]
+        shape = feature["shape"]
+        if len(shape) >= 2:
+            return [int(shape[0]), int(shape[1])]
+    except Exception:
+        return default_size
+
+    return default_size
+
+
+droid_effective_val_annotation_path = _resolve_val_annotation_path(
+    droid_val_annotation_path,
+    droid_test_annotation_path,
+)
+droid_smoke_effective_val_annotation_path = _resolve_val_annotation_path(
+    droid_smoke_val_annotation_path,
+    droid_smoke_test_annotation_path,
+)
+droid_per_view_video_size = _load_droid_per_view_video_size(droid_lerobot_meta_info_path)
 
 
 # experiment for next-frame prediction
@@ -355,6 +420,108 @@ agibot_multiview_13frame_480_1920_val_dataloader = L(DataLoader)(
 ################################################
 
 
+################### DROID Multi-View Dataset (3 views, width-concatenated to 180x960) ###################
+droid_multiview_13frame_180_960_train_dataset = L(ActionConditionedMultiViewDataset_DROID)(
+    train_annotation_path=droid_train_annotation_path,
+    val_annotation_path=droid_effective_val_annotation_path,
+    test_annotation_path=droid_test_annotation_path,
+    video_path=droid_base_path,
+    fps_downsample_ratio=1,
+    num_action_per_chunk=12,
+    cam_ids=[0, 1, 2],
+    accumulate_action=False,
+    video_size=droid_per_view_video_size,
+    val_start_frame_interval=1,
+    mode="train",
+    action_stats_path=droid_action_stats_path,
+    action_normalization="minmax",
+)
+droid_multiview_13frame_180_960_val_dataset = L(ActionConditionedMultiViewDataset_DROID)(
+    train_annotation_path=droid_train_annotation_path,
+    val_annotation_path=droid_effective_val_annotation_path,
+    test_annotation_path=droid_test_annotation_path,
+    video_path=droid_base_path,
+    fps_downsample_ratio=1,
+    num_action_per_chunk=12,
+    cam_ids=[0, 1, 2],
+    accumulate_action=False,
+    video_size=droid_per_view_video_size,
+    val_start_frame_interval=100,
+    mode="val",
+    action_stats_path=droid_action_stats_path,
+    action_normalization="minmax",
+)
+
+droid_multiview_13frame_180_960_train_dataloader = L(DataLoader)(
+    dataset=droid_multiview_13frame_180_960_train_dataset,
+    sampler=L(get_sampler)(dataset=droid_multiview_13frame_180_960_train_dataset),
+    batch_size=1,
+    drop_last=True,
+    num_workers=4,
+    pin_memory=True,
+)
+droid_multiview_13frame_180_960_val_dataloader = L(DataLoader)(
+    dataset=droid_multiview_13frame_180_960_val_dataset,
+    sampler=L(get_sampler)(dataset=droid_multiview_13frame_180_960_val_dataset),
+    batch_size=1,
+    drop_last=True,
+    num_workers=4,
+    pin_memory=True,
+)
+################################################
+
+
+################### Smoke Test DROID Multi-View Dataset (3 views, width-concatenated to 180x960) ###################
+droid_multiview_13frame_180_960_smoke_train_dataset = L(ActionConditionedMultiViewDataset_DROID)(
+    train_annotation_path=droid_smoke_train_annotation_path,
+    val_annotation_path=droid_smoke_effective_val_annotation_path,
+    test_annotation_path=droid_smoke_test_annotation_path,
+    video_path=droid_base_path,
+    fps_downsample_ratio=1,
+    num_action_per_chunk=12,
+    cam_ids=[0, 1, 2],
+    accumulate_action=False,
+    video_size=droid_per_view_video_size,
+    val_start_frame_interval=1,
+    mode="train",
+    action_stats_path=droid_action_stats_path,
+    action_normalization="minmax",
+)
+droid_multiview_13frame_180_960_smoke_val_dataset = L(ActionConditionedMultiViewDataset_DROID)(
+    train_annotation_path=droid_smoke_train_annotation_path,
+    val_annotation_path=droid_smoke_effective_val_annotation_path,
+    test_annotation_path=droid_smoke_test_annotation_path,
+    video_path=droid_base_path,
+    fps_downsample_ratio=1,
+    num_action_per_chunk=12,
+    cam_ids=[0, 1, 2],
+    accumulate_action=False,
+    video_size=droid_per_view_video_size,
+    val_start_frame_interval=100,
+    mode="val",
+    action_stats_path=droid_action_stats_path,
+    action_normalization="minmax",
+)
+
+droid_multiview_13frame_180_960_smoke_train_dataloader = L(DataLoader)(
+    dataset=droid_multiview_13frame_180_960_smoke_train_dataset,
+    sampler=L(get_sampler)(dataset=droid_multiview_13frame_180_960_smoke_train_dataset),
+    batch_size=1,
+    drop_last=True,
+    num_workers=4,
+    pin_memory=True,
+)
+droid_multiview_13frame_180_960_smoke_val_dataloader = L(DataLoader)(
+    dataset=droid_multiview_13frame_180_960_smoke_val_dataset,
+    sampler=L(get_sampler)(dataset=droid_multiview_13frame_180_960_smoke_val_dataset),
+    batch_size=1,
+    drop_last=True,
+    num_workers=4,
+    pin_memory=True,
+)
+################################################
+
+
 ################### Smoke Test Multi-View DF Dataset (3 views, width-concatenated) ###################
 
 # Smoke test multi-view 3-camera dataset: 448x1344 (3x448 width)
@@ -522,6 +689,34 @@ def register_training_and_val_data():
         node=agibot_multiview_13frame_480_1920_val_dataloader,
     )
 
+    # DROID Multi-view 3-camera 13 frame 180x960
+    cs.store(
+        group="data_train",
+        package="dataloader_train",
+        name="droid_multiview_13frame_180_960_train",
+        node=droid_multiview_13frame_180_960_train_dataloader,
+    )
+    cs.store(
+        group="data_val",
+        package="dataloader_val",
+        name="droid_multiview_13frame_180_960_val",
+        node=droid_multiview_13frame_180_960_val_dataloader,
+    )
+
+    # Smoke Test DROID Multi-view 3-camera 13 frame 180x960
+    cs.store(
+        group="data_train",
+        package="dataloader_train",
+        name="droid_multiview_13frame_180_960_smoke_train",
+        node=droid_multiview_13frame_180_960_smoke_train_dataloader,
+    )
+    cs.store(
+        group="data_val",
+        package="dataloader_val",
+        name="droid_multiview_13frame_180_960_smoke_val",
+        node=droid_multiview_13frame_180_960_smoke_val_dataloader,
+    )
+
     # Smoke Test Multi-view 3-camera 13 frame 448x1344
     cs.store(
         group="data_train",
@@ -553,4 +748,3 @@ def register_training_and_val_data():
     # Register gr00t_customized_gr1 data
     if register_gr00t_customized_gr1_data is not None:
         register_gr00t_customized_gr1_data()
-
