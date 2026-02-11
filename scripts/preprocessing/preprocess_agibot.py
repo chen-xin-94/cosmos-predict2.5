@@ -24,8 +24,40 @@ from pathlib import Path
 
 import h5py
 import numpy as np
-from agibot_config import ACTION_KEYS, STATE_KEYS, VIDEO_VIEWS
 from tqdm import tqdm
+
+# State keys to extract and flatten (in order).
+# Dimensions: 2 + 8 + 6 + 2 + 14 + 14 + 4 + 3 + 2 = 55
+STATE_KEYS = [
+    "effector.position",    # shape (2,)
+    "end.orientation",      # shape (2, 4) -> 8
+    "end.position",         # shape (2, 3) -> 6
+    "head.position",        # shape (2,)
+    "joint.current_value",  # shape (14,)
+    "joint.position",       # shape (14,)
+    "robot.orientation",    # shape (4,)
+    "robot.position",       # shape (3,)
+    "waist.position",       # shape (2,)
+]
+
+# Action keys to extract and flatten (in order).
+# Dimensions: 2 + 8 + 6 + 2 + 14 + 2 + 2 = 36
+ACTION_KEYS = [
+    "effector.position",    # shape (2,)
+    "end.orientation",      # shape (2, 4) -> 8
+    "end.position",         # shape (2, 3) -> 6
+    "head.position",        # shape (2,)
+    "joint.position",       # shape (14,)
+    "robot.velocity",       # shape (2,)
+    "waist.position",       # shape (2,)
+]
+
+# Video views to extract (in order).
+VIDEO_VIEWS = [
+    "hand_left_color",
+    "head_color",
+    "hand_right_color",
+]
 
 
 def load_task_info(task_json_path: Path) -> dict[int, dict]:
