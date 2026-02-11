@@ -218,10 +218,7 @@ class EveryNDrawSampleMultiviewVideo(EveryNDrawSample):
                     resize_image(image_grid_12frames, 1024), local_path_12frames, nrow=1, scale_each=True
                 )
                 # Create a single stacked video
-                # Dynamically calculate width per view
-                _, _, _, _, h_total, w_total = to_show.shape
-                w_per_view = w_total // n_views
-                video_tensor = rearrange(to_show, "n b c t h (v w) -> t (n h) (b v w) c", v=n_views, w=w_per_view)
+                video_tensor = rearrange(to_show, "n b c t h (v w) -> t (n h) (b v w) c", v=n_views)
 
                 # Resize width to 1024 while preserving aspect ratio (keep float to avoid quantization before resize)
                 max_w = 2048
@@ -343,14 +340,14 @@ class EveryNDrawSampleMultiviewVideo(EveryNDrawSample):
                         sample_all_img_fp[1], caption=f"{sample_counter}"
                     )
                     info[f"{self.name}/{tag}_sample_allviews"] = wandb.Video(
-                        sample_all_img_fp[2], caption=f"{sample_counter}", format="mp4"
+                        sample_all_img_fp[2], caption=f"{sample_counter}"
                     )
 
                 # info[f"{self.name}/{tag}_sample"] = wandb.Image(sample_n_img_fp[0], caption=f"{sample_counter}")
                 info[f"{self.name}/{tag}_sample_nviews_frames"] = wandb.Image(
                     sample_n_img_fp[1], caption=f"{sample_counter}"
                 )
-                info[f"{self.name}/{tag}_sample_nviews"] = wandb.Video(sample_n_img_fp[2], caption=f"{sample_counter}", format="mp4")
+                info[f"{self.name}/{tag}_sample_nviews"] = wandb.Video(sample_n_img_fp[2], caption=f"{sample_counter}")
             wandb.log(
                 info,
                 step=iteration,
