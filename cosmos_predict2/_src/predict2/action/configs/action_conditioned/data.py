@@ -15,6 +15,7 @@
 
 import json
 import os
+import warnings
 
 from hydra.core.config_store import ConfigStore
 from megatron.core import parallel_state
@@ -112,6 +113,27 @@ def _load_droid_per_view_video_size(meta_info_path: str) -> list[int]:
     return default_size
 
 
+def _align_video_size_to_multiple(video_size: list[int], multiple: int = 16) -> list[int]:
+    if len(video_size) != 2:
+        raise ValueError(f"Expected video_size as [H, W], got {video_size}")
+
+    h, w = int(video_size[0]), int(video_size[1])
+    if h <= 0 or w <= 0:
+        raise ValueError(f"Video size must be positive, got {video_size}")
+
+    aligned_h = h - (h % multiple)
+    aligned_w = w - (w % multiple)
+    if aligned_h <= 0 or aligned_w <= 0:
+        raise ValueError(f"Video size {video_size} is too small for multiple={multiple}")
+
+    if aligned_h != h or aligned_w != w:
+        warnings.warn(
+            f"DROID per-view video size {video_size} is not divisible by {multiple}. "
+            f"Using [{aligned_h}, {aligned_w}] to match tokenizer spatial compression."
+        )
+    return [aligned_h, aligned_w]
+
+
 droid_effective_val_annotation_path = _resolve_val_annotation_path(
     droid_val_annotation_path,
     droid_test_annotation_path,
@@ -120,7 +142,10 @@ droid_smoke_effective_val_annotation_path = _resolve_val_annotation_path(
     droid_smoke_val_annotation_path,
     droid_smoke_test_annotation_path,
 )
-droid_per_view_video_size = _load_droid_per_view_video_size(droid_lerobot_meta_info_path)
+droid_per_view_video_size = _align_video_size_to_multiple(
+    _load_droid_per_view_video_size(droid_lerobot_meta_info_path),
+    multiple=16,
+)
 
 
 # experiment for next-frame prediction
@@ -420,8 +445,8 @@ agibot_multiview_13frame_480_1920_val_dataloader = L(DataLoader)(
 ################################################
 
 
-################### DROID Multi-View Dataset (3 views, width-concatenated to 180x960) ###################
-droid_multiview_13frame_180_960_train_dataset = L(ActionConditionedMultiViewDataset_DROID)(
+################### DROID Multi-View Dataset (3 views, width-concatenated to 176x960) ###################
+droid_multiview_13frame_176_960_train_dataset = L(ActionConditionedMultiViewDataset_DROID)(
     train_annotation_path=droid_train_annotation_path,
     val_annotation_path=droid_effective_val_annotation_path,
     test_annotation_path=droid_test_annotation_path,
@@ -436,7 +461,7 @@ droid_multiview_13frame_180_960_train_dataset = L(ActionConditionedMultiViewData
     action_stats_path=droid_action_stats_path,
     action_normalization="minmax",
 )
-droid_multiview_13frame_180_960_val_dataset = L(ActionConditionedMultiViewDataset_DROID)(
+droid_multiview_13frame_176_960_val_dataset = L(ActionConditionedMultiViewDataset_DROID)(
     train_annotation_path=droid_train_annotation_path,
     val_annotation_path=droid_effective_val_annotation_path,
     test_annotation_path=droid_test_annotation_path,
@@ -452,17 +477,17 @@ droid_multiview_13frame_180_960_val_dataset = L(ActionConditionedMultiViewDatase
     action_normalization="minmax",
 )
 
-droid_multiview_13frame_180_960_train_dataloader = L(DataLoader)(
-    dataset=droid_multiview_13frame_180_960_train_dataset,
-    sampler=L(get_sampler)(dataset=droid_multiview_13frame_180_960_train_dataset),
+droid_multiview_13frame_176_960_train_dataloader = L(DataLoader)(
+    dataset=droid_multiview_13frame_176_960_train_dataset,
+    sampler=L(get_sampler)(dataset=droid_multiview_13frame_176_960_train_dataset),
     batch_size=1,
     drop_last=True,
     num_workers=4,
     pin_memory=True,
 )
-droid_multiview_13frame_180_960_val_dataloader = L(DataLoader)(
-    dataset=droid_multiview_13frame_180_960_val_dataset,
-    sampler=L(get_sampler)(dataset=droid_multiview_13frame_180_960_val_dataset),
+droid_multiview_13frame_176_960_val_dataloader = L(DataLoader)(
+    dataset=droid_multiview_13frame_176_960_val_dataset,
+    sampler=L(get_sampler)(dataset=droid_multiview_13frame_176_960_val_dataset),
     batch_size=1,
     drop_last=True,
     num_workers=4,
@@ -471,8 +496,8 @@ droid_multiview_13frame_180_960_val_dataloader = L(DataLoader)(
 ################################################
 
 
-################### Smoke Test DROID Multi-View Dataset (3 views, width-concatenated to 180x960) ###################
-droid_multiview_13frame_180_960_smoke_train_dataset = L(ActionConditionedMultiViewDataset_DROID)(
+################### Smoke Test DROID Multi-View Dataset (3 views, width-concatenated to 176x960) ###################
+droid_multiview_13frame_176_960_smoke_train_dataset = L(ActionConditionedMultiViewDataset_DROID)(
     train_annotation_path=droid_smoke_train_annotation_path,
     val_annotation_path=droid_smoke_effective_val_annotation_path,
     test_annotation_path=droid_smoke_test_annotation_path,
@@ -487,7 +512,7 @@ droid_multiview_13frame_180_960_smoke_train_dataset = L(ActionConditionedMultiVi
     action_stats_path=droid_action_stats_path,
     action_normalization="minmax",
 )
-droid_multiview_13frame_180_960_smoke_val_dataset = L(ActionConditionedMultiViewDataset_DROID)(
+droid_multiview_13frame_176_960_smoke_val_dataset = L(ActionConditionedMultiViewDataset_DROID)(
     train_annotation_path=droid_smoke_train_annotation_path,
     val_annotation_path=droid_smoke_effective_val_annotation_path,
     test_annotation_path=droid_smoke_test_annotation_path,
@@ -503,17 +528,17 @@ droid_multiview_13frame_180_960_smoke_val_dataset = L(ActionConditionedMultiView
     action_normalization="minmax",
 )
 
-droid_multiview_13frame_180_960_smoke_train_dataloader = L(DataLoader)(
-    dataset=droid_multiview_13frame_180_960_smoke_train_dataset,
-    sampler=L(get_sampler)(dataset=droid_multiview_13frame_180_960_smoke_train_dataset),
+droid_multiview_13frame_176_960_smoke_train_dataloader = L(DataLoader)(
+    dataset=droid_multiview_13frame_176_960_smoke_train_dataset,
+    sampler=L(get_sampler)(dataset=droid_multiview_13frame_176_960_smoke_train_dataset),
     batch_size=1,
     drop_last=True,
     num_workers=4,
     pin_memory=True,
 )
-droid_multiview_13frame_180_960_smoke_val_dataloader = L(DataLoader)(
-    dataset=droid_multiview_13frame_180_960_smoke_val_dataset,
-    sampler=L(get_sampler)(dataset=droid_multiview_13frame_180_960_smoke_val_dataset),
+droid_multiview_13frame_176_960_smoke_val_dataloader = L(DataLoader)(
+    dataset=droid_multiview_13frame_176_960_smoke_val_dataset,
+    sampler=L(get_sampler)(dataset=droid_multiview_13frame_176_960_smoke_val_dataset),
     batch_size=1,
     drop_last=True,
     num_workers=4,
@@ -689,32 +714,32 @@ def register_training_and_val_data():
         node=agibot_multiview_13frame_480_1920_val_dataloader,
     )
 
-    # DROID Multi-view 3-camera 13 frame 180x960
+    # DROID Multi-view 3-camera 13 frame 176x960
     cs.store(
         group="data_train",
         package="dataloader_train",
-        name="droid_multiview_13frame_180_960_train",
-        node=droid_multiview_13frame_180_960_train_dataloader,
+        name="droid_multiview_13frame_176_960_train",
+        node=droid_multiview_13frame_176_960_train_dataloader,
     )
     cs.store(
         group="data_val",
         package="dataloader_val",
-        name="droid_multiview_13frame_180_960_val",
-        node=droid_multiview_13frame_180_960_val_dataloader,
+        name="droid_multiview_13frame_176_960_val",
+        node=droid_multiview_13frame_176_960_val_dataloader,
     )
 
-    # Smoke Test DROID Multi-view 3-camera 13 frame 180x960
+    # Smoke Test DROID Multi-view 3-camera 13 frame 176x960
     cs.store(
         group="data_train",
         package="dataloader_train",
-        name="droid_multiview_13frame_180_960_smoke_train",
-        node=droid_multiview_13frame_180_960_smoke_train_dataloader,
+        name="droid_multiview_13frame_176_960_smoke_train",
+        node=droid_multiview_13frame_176_960_smoke_train_dataloader,
     )
     cs.store(
         group="data_val",
         package="dataloader_val",
-        name="droid_multiview_13frame_180_960_smoke_val",
-        node=droid_multiview_13frame_180_960_smoke_val_dataloader,
+        name="droid_multiview_13frame_176_960_smoke_val",
+        node=droid_multiview_13frame_176_960_smoke_val_dataloader,
     )
 
     # Smoke Test Multi-view 3-camera 13 frame 448x1344

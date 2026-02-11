@@ -311,26 +311,26 @@ ac_reason_embeddings_rectified_flow_2b_agibot_480_1920 = LazyDict(
 
 """
 DROID Multi-view 3-camera action-conditioned training
-Resolution: 180x960 (3 views of 180x320 concatenated along width)
+Resolution: 176x960 (3 views of 176x320 concatenated along width)
 Action dimension: 7 (loaded from JSON and min-max normalized by stats)
 
-torchrun --nproc_per_node=1 --master_port=12341 -m scripts.train --config=cosmos_predict2/_src/predict2/action/configs/action_conditioned/config.py  -- experiment=ac_reason_embeddings_rectified_flow_2b_droid_180_960 ~dataloader_train.dataloaders
+torchrun --nproc_per_node=1 --master_port=12341 -m scripts.train --config=cosmos_predict2/_src/predict2/action/configs/action_conditioned/config.py  -- experiment=ac_reason_embeddings_rectified_flow_2b_droid_176_960 ~dataloader_train.dataloaders
 """
-ac_reason_embeddings_rectified_flow_2b_droid_180_960 = LazyDict(
+ac_reason_embeddings_rectified_flow_2b_droid_176_960 = LazyDict(
     dict(
         defaults=[
             DEFAULT_CHECKPOINT.experiment,
             {"override /model": "action_conditioned_video2world_fsdp_rectified_flow"},
             {"override /net": "cosmos_v1_2B_action_conditioned"},
             {"override /conditioner": "action_conditioned_video_conditioner"},
-            {"override /data_train": "droid_multiview_13frame_180_960_train"},
-            {"override /data_val": "droid_multiview_13frame_180_960_val"},
+            {"override /data_train": "droid_multiview_13frame_176_960_train"},
+            {"override /data_val": "droid_multiview_13frame_176_960_val"},
             "_self_",
         ],
         job=dict(
             project="cosmos_predict2_action_conditioned",
             group="cosmos_predict_v2p5",
-            name=f"2b_droid_multiview_action_conditioned_180_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            name=f"2b_droid_multiview_action_conditioned_176_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
             wandb_mode="online",
         ),
         optimizer=dict(
@@ -373,9 +373,9 @@ ac_reason_embeddings_rectified_flow_2b_droid_180_960 = LazyDict(
             ),
         ),
         dataloader_train=dict(
-            batch_size=2,
-            sampler=dict(dataset=dict(fps_downsample_ratio=6, video_size=[180, 320])),
-            dataset=dict(fps_downsample_ratio=6, video_size=[180, 320]),
+            batch_size=8,
+            sampler=dict(dataset=dict(fps_downsample_ratio=6, video_size=[176, 320])),
+            dataset=dict(fps_downsample_ratio=6, video_size=[176, 320]),
         ),
     ),
     flags={"allow_objects": True},
@@ -461,21 +461,21 @@ ac_reason_embeddings_rectified_flow_2b_multiview_448_1344_smoke = LazyDict(
 
 """
 Smoke Test for DROID Multi-view 3-camera action-conditioned training
-Resolution: 180x960 (3 views of 180x320 concatenated along width)
+Resolution: 176x960 (3 views of 176x320 concatenated along width)
 Uses DROID train/val registration from action_conditioned/data.py
 
-torchrun --nproc_per_node=1 --master_port=12341 -m scripts.train --config=cosmos_predict2/_src/predict2/action/configs/action_conditioned/config.py  -- experiment=ac_reason_embeddings_rectified_flow_2b_droid_180_960_smoke ~dataloader_train.dataloaders
+torchrun --nproc_per_node=1 --master_port=12341 -m scripts.train --config=cosmos_predict2/_src/predict2/action/configs/action_conditioned/config.py  -- experiment=ac_reason_embeddings_rectified_flow_2b_droid_176_960_smoke ~dataloader_train.dataloaders
 """
-ac_reason_embeddings_rectified_flow_2b_droid_180_960_smoke = LazyDict(
+ac_reason_embeddings_rectified_flow_2b_droid_176_960_smoke = LazyDict(
     dict(
         defaults=[
-            "ac_reason_embeddings_rectified_flow_2b_droid_180_960",
-            {"override /data_train": "droid_multiview_13frame_180_960_smoke_train"},
-            {"override /data_val": "droid_multiview_13frame_180_960_smoke_val"},
+            "ac_reason_embeddings_rectified_flow_2b_droid_176_960",
+            {"override /data_train": "droid_multiview_13frame_176_960_smoke_train"},
+            {"override /data_val": "droid_multiview_13frame_176_960_smoke_val"},
             "_self_",
         ],
         job=dict(
-            name=f"2b_droid_multiview_action_conditioned_180_smoke_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            name=f"2b_droid_multiview_action_conditioned_176_smoke_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
             wandb_mode="disabled",
         ),
         trainer=dict(
@@ -529,6 +529,10 @@ ac_reason_embeddings_rectified_flow_2b_agibot_480_1920_smoke = LazyDict(
     flags={"allow_objects": True},
 )
 
+# Backward-compatible aliases for older DROID experiment names.
+ac_reason_embeddings_rectified_flow_2b_droid_180_960 = ac_reason_embeddings_rectified_flow_2b_droid_176_960
+ac_reason_embeddings_rectified_flow_2b_droid_180_960_smoke = ac_reason_embeddings_rectified_flow_2b_droid_176_960_smoke
+
 
 # Map of experiment configs to their static registration names (used by Hydra)
 # The actual job.name will have timestamps, but Hydra needs static names
@@ -536,9 +540,9 @@ experiments = {
     ac_reason_embeddings_rectified_flow_2b_256_320_df: "ac_reason_embeddings_rectified_flow_2b_256_320_df",
     ac_reason_embeddings_rectified_flow_2b_multiview_448_1344: "ac_reason_embeddings_rectified_flow_2b_multiview_448_1344",
     ac_reason_embeddings_rectified_flow_2b_agibot_480_1920: "ac_reason_embeddings_rectified_flow_2b_agibot_480_1920",
-    ac_reason_embeddings_rectified_flow_2b_droid_180_960: "ac_reason_embeddings_rectified_flow_2b_droid_180_960",
+    ac_reason_embeddings_rectified_flow_2b_droid_176_960: "ac_reason_embeddings_rectified_flow_2b_droid_176_960",
     ac_reason_embeddings_rectified_flow_2b_multiview_448_1344_smoke: "ac_reason_embeddings_rectified_flow_2b_multiview_448_1344_smoke",
-    ac_reason_embeddings_rectified_flow_2b_droid_180_960_smoke: "ac_reason_embeddings_rectified_flow_2b_droid_180_960_smoke",
+    ac_reason_embeddings_rectified_flow_2b_droid_176_960_smoke: "ac_reason_embeddings_rectified_flow_2b_droid_176_960_smoke",
     ac_reason_embeddings_rectified_flow_2b_agibot_480_1920_smoke: "ac_reason_embeddings_rectified_flow_2b_agibot_480_1920_smoke",
     ac_reason_embeddings_rectified_flow_2b_multiview_448_1344_wo_text: "ac_reason_embeddings_rectified_flow_2b_multiview_448_1344_wo_text",
 }
@@ -546,3 +550,17 @@ experiments = {
 
 for config, static_name in experiments.items():
     cs.store(group="experiment", package="_global_", name=static_name, node=config)
+
+# Register legacy aliases explicitly to avoid breaking existing launch scripts.
+cs.store(
+    group="experiment",
+    package="_global_",
+    name="ac_reason_embeddings_rectified_flow_2b_droid_180_960",
+    node=ac_reason_embeddings_rectified_flow_2b_droid_176_960,
+)
+cs.store(
+    group="experiment",
+    package="_global_",
+    name="ac_reason_embeddings_rectified_flow_2b_droid_180_960_smoke",
+    node=ac_reason_embeddings_rectified_flow_2b_droid_176_960_smoke,
+)

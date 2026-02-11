@@ -111,6 +111,9 @@ Required additions:
 - Read `/mnt/.../<dataset>/meta/info.json`.
 - Use `features.<camera_key>.shape[:2]` as `[H, W]`.
 - Keep a safe default fallback.
+- Align `[H, W]` to tokenizer spatial compression factor (`16`) before dataset registration.
+  - Recommended policy: floor to nearest multiple of 16 (for both height and width).
+  - Emit a warning when alignment changes the metadata resolution.
 
 5. Register full dataloaders with stable names, e.g.:
 - `<dataset>_multiview_13frame_<H>_<3W>_train`
@@ -121,8 +124,8 @@ Required additions:
 - `<dataset>_multiview_13frame_<H>_<3W>_smoke_val`
 
 DROID reference blocks:
-- Full registration in `data.py` (`droid_multiview_13frame_180_960_*`)
-- Smoke registration in `data.py` (`droid_multiview_13frame_180_960_smoke_*`)
+- Full registration in `data.py` (`droid_multiview_13frame_176_960_*`)
+- Smoke registration in `data.py` (`droid_multiview_13frame_176_960_smoke_*`)
 
 ---
 
@@ -148,8 +151,8 @@ Add a smoke experiment:
 Finally register both in `experiments = { ... }` map.
 
 DROID references:
-- Full: `ac_reason_embeddings_rectified_flow_2b_droid_180_960`
-- Smoke: `ac_reason_embeddings_rectified_flow_2b_droid_180_960_smoke`
+- Full: `ac_reason_embeddings_rectified_flow_2b_droid_176_960`
+- Smoke: `ac_reason_embeddings_rectified_flow_2b_droid_176_960_smoke`
 
 ---
 
@@ -192,9 +195,19 @@ For LeRobot datasets, use:
 - `/mnt/.../<dataset>/meta/info.json`
 - `features.<camera_key>.shape = [H, W, C]`
 
+Then enforce model-compatible size:
+- Validate `H % 16 == 0` and `W % 16 == 0`.
+- If not divisible, align to `[H - H % 16, W - W % 16]` in data config.
+- Use the aligned resolution consistently in:
+  - dataset registration names (`<H>_<3W>`)
+  - experiment names
+  - train/smoke shell scripts
+  - dataloader override `video_size`
+
 DROID example:
-- Per-view: `180x320`
-- 3-view horizontal concat: `180x960`
+- Metadata per-view: `180x320`
+- Effective per-view (16-aligned): `176x320`
+- 3-view horizontal concat (effective): `176x960`
 
 ---
 
@@ -210,6 +223,9 @@ Run at minimum:
 - `data.py`
 - `experiments/base/action.py`
 - `scripts/train/*.sh`
+4. Verify resolution divisibility and consistency:
+- Per-view `H/W` are multiples of 16.
+- Concat width equals `num_views * per_view_width`.
 
 If runtime environment lacks dependencies (e.g., `torch`, `attrs`, CUDA extras), compile + static checks are still required, and runtime checks should be deferred to the training environment.
 
@@ -220,7 +236,7 @@ If runtime environment lacks dependencies (e.g., `torch`, `attrs`, CUDA extras),
 1. Empty `annotation/val` causes val dataloader issues unless fallback is implemented.
 2. Experiment name changed but train shell script still points to old name.
 3. Dataloader registration name mismatch with experiment override.
-4. Using wrong per-view resize (e.g., inherited 448x448) instead of dataset-native resolution from `info.json`.
+4. Using raw `info.json` resolution directly when it is not divisible by 16 (causes implicit truncation/cropping downstream).
 5. Smoke experiment still points to full dataset instead of smoke dataset.
 6. Action normalization stats path missing or stale.
 
